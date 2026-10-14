@@ -10,7 +10,9 @@ from tests.test_ocr import SAMPLE_LINES, _text_png, submit
 
 
 def _png_file():
-    return [("proof.png", _text_png(SAMPLE_LINES), "image/png")]
+    # Realistic filename: the document-checklist payment gate classifies uploads by category;
+    # an ambiguous name ("proof.png") legitimately cannot satisfy a mandatory checklist item.
+    return [("semester-1-grade-card.png", _text_png(SAMPLE_LINES), "image/png")]
 
 
 def _statuses(body):

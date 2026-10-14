@@ -124,8 +124,13 @@ def test_generate_usn_rejects_sequence_501():
 
 
 def test_generate_usn_rejects_invalid_year():
-    with pytest.raises(UsNValidationError, match="out of range"):
+    # Year rejection is governed by the configured supported range (settings.usn_year_min/max),
+    # so the message says "outside the configured supported range"; sequence errors keep saying
+    # "out of range". Assert both facts to pin the distinction.
+    with pytest.raises(UsNValidationError, match="outside the configured supported range"):
         generate_usn(1946, "BCS", 1)
+    with pytest.raises(UsNValidationError, match="out of range"):
+        generate_usn(2023, "BCS", 501)
 
 
 def test_parse_usn_round_trip():

@@ -231,9 +231,13 @@ def assign_categories(application: Application, student: Student | None = None) 
     # checklist slot on every evaluation. A multi-slot item (e.g. semester grade cards) may be
     # satisfied by several documents, so it does not block other docs from the same category.
     for doc in application.documents:
+        # document_category is a PERSISTED column (revision 20261014_562d5a8aebea), so the value
+        # loaded from the database is authoritative across requests/sessions — no private-attribute
+        # lookups. A verified row keeps its stored category; re-guessing could move it to another
+        # checklist slot on every evaluation.
         reviewer_cat = read_review_category(doc)
         if reviewer_cat is None and getattr(doc, "validation_status", None) == ApplicationStatus.VERIFIED.value:
-            stored = doc.__dict__.get("_document_category")
+            stored = getattr(doc, "document_category", None)
             reviewer_cat = stored if stored and stored != "UNASSIGNED" else None
         if reviewer_cat and reviewer_cat in valid:
             doc.document_category = reviewer_cat
