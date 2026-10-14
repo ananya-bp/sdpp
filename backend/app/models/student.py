@@ -1,8 +1,9 @@
+from typing import TYPE_CHECKING
 from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Numeric, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
@@ -34,3 +35,9 @@ class Student(Base):
     # Provisional values: 'CLEAR' (no dues) / 'DUE'. Finalised with the eligibility rules in Phase 3.
     fee_status: Mapped[str] = mapped_column(String(20), default="CLEAR", server_default="CLEAR")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    applications: Mapped[list["Application"]] = relationship(back_populates="student")
+
+
+if TYPE_CHECKING:  # relationship target only; avoids a circular import
+    from app.models.application import Application  # noqa: F401

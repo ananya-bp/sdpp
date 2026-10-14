@@ -34,6 +34,7 @@ class Application(Base):
     )
 
     document_type: Mapped["DocumentType"] = relationship()
+    student: Mapped["Student"] = relationship(back_populates="applications")
     documents: Mapped[list["UploadedDocument"]] = relationship(
         order_by="UploadedDocument.id", cascade="all, delete-orphan", passive_deletes=True
     )

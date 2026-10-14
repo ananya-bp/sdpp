@@ -247,15 +247,24 @@ def assign_categories(application: Application, student: Student | None = None) 
             doc.document_category = "UNASSIGNED"  # stale decision for this type -> needs review
             continue
         # Pass 2 (per doc): deterministic hint chain — filename first, OCR text second. A hint
-        # that collides with a reviewer-assigned single-slot item is dropped rather than stealing
-        # its slot; multi-slot items (grade cards) tolerate several documents.
+        # that collides with an already-claimed single-slot item is dropped rather than stealing
+        # its slot; multi-slot items (grade cards) tolerate several documents. `assigned` is the
+        # running set of claimed slots so two hinted docs cannot both take one single-slot item.
+        assigned = set(reviewer_assigned)
+        for d in application.documents:
+            if getattr(d, "document_category", None) and d.document_category != "UNASSIGNED":
+                assigned.add(d.document_category)
         cat = guess_category(doc.original_filename or "", "")
-        if cat in reviewer_assigned:
+        if cat in assigned:
             item = _find_item(code, cat)
             if item is not None and not getattr(item, "multi", False):
                 cat = None
         if cat is None and doc.ocr_result is not None:
             cat = guess_category("", doc.ocr_result.raw_text)
+            if cat in assigned:
+                item = _find_item(code, cat)
+                if item is not None and not getattr(item, "multi", False):
+                    cat = None
         doc.document_category = cat if (cat and cat in valid) else "UNASSIGNED"
 
 

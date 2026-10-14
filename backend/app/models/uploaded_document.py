@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -6,6 +7,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.models.ocr_result import OcrResult  # noqa: F401  (relationship target)
+
+if TYPE_CHECKING:  # circular-import guard: Application already imports this module
+    from app.models.application import Application
 
 
 class UploadedDocument(Base):
@@ -34,6 +38,8 @@ class UploadedDocument(Base):
     size_bytes: Mapped[int]
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    application: Mapped["Application"] = relationship(back_populates="documents")
+
     # --- Checklist / verification tracking -------------------------------------------
     # Checklist category is PERSISTED (see the `document_category` DB column added by revision
     # 20261014_562d5a8aebea). Persistence is what lets a reviewer's decision survive across
@@ -61,23 +67,29 @@ class UploadedDocument(Base):
     def extension(self) -> str | None:  # type: ignore[no-redef]
         """Normalised extension (pdf/jpg/jpeg/png) — not a DB column, no migration needed.
 
-        For in-flight upload objects (before INSERT) this returns the validated extension of
-        the file content that was attached at construction time; for rows loaded from the
-        database it is derived from stored_path (which ends in the validated extension).
+        Precedence: an explicitly assigned value (`_extension_override`, written by the
+        setter during in-flight upload handling before `stored_path` exists) wins; otherwise
+        the extension is derived from `stored_path` (which ends in the validated extension),
+        so rows loaded from the database in any new session behave identically.
         Used to check request-specific required-document types.
         """
-        attached = self.__dict__.get("_upload_extension")
-        if attached is not None:
-            return attached
+        override = self.__dict__.get("_extension_override")
+        if override is not None:
+            return override
         path = self.stored_path or ""
-        _, _, ext = path.rpartition(".")
-        return ext.lower() or None
+        _, slash, ext = path.rpartition(".")
+        # A dot must actually follow a directory/file name; "uploads/noextension" has no
+        # extension and must not be misread as one.
+        if not slash or not ext:
+            return None
+        return ext.lower()
 
     @extension.setter
     def extension(self, value: str | None) -> None:
-        # Store in the instance __dict__ under a private key so SQLAlchemy's attribute events
-        # never see an unmapped write on a persistent object.
-        self.__dict__["_upload_extension"] = value
+        # Store in the instance __dict__ under a private key so SQLAlchemy's attribute
+        # events never see an unmapped write on a persistent object. This is what makes
+        # `doc.extension = "pdf"` safe before `stored_path` has been populated.
+        self.__dict__["_extension_override"] = value
 
     @extension.inplace.expression
     @classmethod

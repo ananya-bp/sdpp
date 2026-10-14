@@ -153,3 +153,96 @@ def test_same_file_sent_twice_under_same_name_is_stored_once(api, student_auth, 
     ])
     assert r.status_code == 201, r.text
     assert len(r.json()["documents"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# UploadedDocument.extension hybrid-property lifecycle (regression coverage)
+# ---------------------------------------------------------------------------
+
+
+def _make_doc(stored_path="uploads/abc.pdf", **kw):
+    from app.models.uploaded_document import UploadedDocument
+
+    defaults = dict(
+        application_id=1,
+        original_filename="abc.pdf",
+        stored_path=stored_path,
+        content_type="application/pdf",
+        size_bytes=1024,
+    )
+    defaults.update(kw)
+    return UploadedDocument(**defaults)
+
+
+def test_extension_assignable_before_stored_path_exists():
+    """Upload routes assign `extension` before INSERT/stored_path is populated."""
+    doc = _make_doc(stored_path="")
+    doc.extension = "PDF"  # must not raise AttributeError
+    assert doc.extension == "PDF"
+
+
+def test_extension_reads_explicit_override():
+    doc = _make_doc()
+    doc.extension = "jpeg"
+    assert doc.extension == "jpeg"
+
+
+def test_extension_derived_from_stored_path_without_override():
+    doc = _make_doc(stored_path="uploads/photo.JPG")
+    assert doc.extension == "jpg"
+
+
+def test_extension_persists_and_reloads_from_new_session(db_session):
+    """A row written and re-loaded in a fresh session derives extension from stored_path."""
+    from sqlalchemy.orm import Session
+
+    from app.models.application import Application, ApplicationStatusHistory  # noqa: F401
+    from app.models.document_type import DocumentType
+    from app.models.student import Student
+    from app.models.uploaded_document import UploadedDocument
+
+    student = db_session.query(Student).first()
+    assert student is not None, "test DB must contain a seeded student"
+
+    doc_type = db_session.query(DocumentType).first()
+    assert doc_type is not None, "test DB must contain a seeded document type"
+
+    application = Application(student_id=student.id, document_type_id=doc_type.id)
+    db_session.add(application)
+    db_session.flush()
+
+    doc = UploadedDocument(
+        application_id=application.id,
+        original_filename="scan.pdf",
+        stored_path="uploads/scan-1234.pdf",
+        content_type="application/pdf",
+        size_bytes=2048,
+    )
+    doc.extension = "pdf"  # in-flight assignment must not break INSERT
+    db_session.add(doc)
+    db_session.commit()
+    doc_id = doc.id
+
+    # Load the row in a brand-new session bound to the same connection/transaction,
+    # emulating a separate request. The override lives only on the old instance, so
+    # the reloaded row must derive its extension from stored_path.
+    other = Session(bind=db_session.get_bind())
+    try:
+        reloaded = other.get(UploadedDocument, doc_id)
+        assert reloaded is not None
+        assert "_extension_override" not in reloaded.__dict__
+        assert reloaded.extension == "pdf"
+    finally:
+        other.close()
+        # Clean up (rows live inside the rolled-back test transaction anyway; this keeps
+        # repeated runs within the same transaction idempotent).
+        db_session.delete(db_session.get(UploadedDocument, doc_id))
+        db_session.delete(db_session.get(Application, application.id))
+        db_session.commit()
+
+
+def test_extension_handles_missing_path_or_extension_safely():
+    doc = _make_doc(stored_path="uploads/noextension")
+    assert doc.extension is None
+    doc2 = _make_doc(stored_path="")
+    assert doc2.extension is None
