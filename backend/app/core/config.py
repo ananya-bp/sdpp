@@ -80,6 +80,25 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
+    # --- USN admission-year policy (application-configured supported range) ---
+    usn_year_min: int = 1947   # earliest historical admission year accepted
+    usn_year_max: int = 2026   # future years allowed only up to the configured limit
+
+    @field_validator("usn_year_min", "usn_year_max")
+    @classmethod
+    def usn_year_must_be_plausible(cls, v: int) -> int:
+        if not (1900 <= v <= 2999):
+            raise ValueError("USN_YEAR_MIN/USN_YEAR_MAX must be plausible calendar years")
+        return v
+
+    @property
+    def usn_supported_years(self) -> tuple[int, int]:
+        """Configured supported full-admission-year range (re-read live so overrides apply)."""
+        lo, hi = self.usn_year_min, self.usn_year_max
+        if lo > hi:
+            raise ValueError("USN_YEAR_MIN must be <= USN_YEAR_MAX")
+        return lo, hi
+
     @property
     def upload_path(self) -> Path:
         p = Path(self.upload_dir)

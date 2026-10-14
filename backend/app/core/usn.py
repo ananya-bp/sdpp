@@ -69,9 +69,31 @@ _DEPT_TO_BRANCH: dict[str, str] = {
 SEQ_MIN = 1
 SEQ_MAX = 500
 
-# Valid full admission year range (full calendar year, not two-digit shorthand).
+# Hard floor for full admission years (historical records begin in 1947). The supported
+# *upper* bound is an application policy: it is read live from the centralised settings
+# (USN_YEAR_MAX) so future years are allowed only within the explicitly configured range.
 YEAR_MIN = 1947
-YEAR_MAX = 2099
+
+
+def _supported_year_range() -> tuple[int, int]:
+    """Configured supported full-admission-year range, re-read on every call."""
+    try:
+        from app.core.config import settings
+
+        return settings.usn_supported_years
+    except Exception:
+        # Fallback for standalone use (no .env / settings unavailable): documented default.
+        return YEAR_MIN, 2026
+
+
+def _check_year(year: int) -> None:
+    lo, hi = _supported_year_range()
+    if not isinstance(year, int) or isinstance(year, bool):
+        raise UsNValidationError(f"Admission year {year!r} must be an integer.")
+    if not (lo <= year <= hi):
+        raise UsNValidationError(
+            f"Admission year {year} is outside the configured supported range ({lo}–{hi})."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -126,10 +148,7 @@ def generate_usn(year: int, branch: str, seq: int) -> str:
     Raises UsNValidationError for unsupported or out-of-range inputs.
     Does NOT guarantee uniqueness — callers must check for collisions.
     """
-    if not (YEAR_MIN <= year <= YEAR_MAX):
-        raise UsNValidationError(
-            f"Admission year {year} is out of range ({YEAR_MIN}–{YEAR_MAX})."
-        )
+    _check_year(year)
     branch = branch.upper()
     if branch not in BRANCH_CODES:
         raise UsNValidationError(
@@ -191,6 +210,46 @@ def branch_from_department(department: str) -> str | None:
     return _DEPT_TO_BRANCH.get(department.strip().lower())
 
 
+def normalize_email(email: str) -> str:
+    """Normalise an email for validation/storage: strip surrounding whitespace and
+    lowercase it (permitted input casing is normalised before validation).
+
+    Raises UsNValidationError for structurally malformed input (empty, spaces inside,
+    missing local part or domain, multiple '@').
+    """
+    if not isinstance(email, str):
+        raise UsNValidationError("Email must be a string.")
+    cleaned = email.strip()
+    if not cleaned or any(ch.isspace() for ch in cleaned):
+        raise UsNValidationError(f"Email {email!r} is empty or contains whitespace.")
+    if cleaned.count("@") != 1:
+        raise UsNValidationError(
+            f"Email {email!r} is malformed: exactly one '@' separator is required."
+        )
+    local, _, domain = cleaned.partition("@")
+    if not local or not domain or "." not in domain:
+        raise UsNValidationError(f"Email {email!r} has a missing local part or domain.")
+    return cleaned.lower()
+
+
+def validate_full_admission_year(usn: str, admission_year: int) -> bool:
+    """Return True when *admission_year* (full calendar year) matches the two-digit code
+    embedded in canonical USN *usn*. The full year is always the source of truth; the YY
+    code alone cannot distinguish centuries (e.g. 1923 vs 2023 both encode '23').
+
+    Raises UsNValidationError if *usn* is not canonical.
+    """
+    yy, _branch, _seq = parse_usn(usn)
+    if not isinstance(admission_year, int) or isinstance(admission_year, bool):
+        raise UsNValidationError(f"Admission year {admission_year!r} must be an integer.")
+    # The full admission year is the source of truth; only its plausibility (not the
+    # configured *generation* range) is checked here, so historical records can still be
+    # validated. Century ambiguity is resolved by the stored full year, never by YY alone.
+    if not (1000 <= admission_year <= 9999):
+        raise UsNValidationError(f"Admission year {admission_year} is not a plausible calendar year.")
+    return admission_year % 100 == yy
+
+
 # ---------------------------------------------------------------------------
 # Collision-safe synthetic USN allocation (uses existing unique constraints; no schema changes)
 # ---------------------------------------------------------------------------
@@ -238,10 +297,7 @@ def allocate_synthetic_usn(
     from app.models import Student
 
     # --- validate inputs through the existing format machinery (raises UsNValidationError) ---
-    if not (YEAR_MIN <= admission_year <= YEAR_MAX):
-        raise UsNValidationError(
-            f"Admission year {admission_year} is out of range ({YEAR_MIN}–{YEAR_MAX})."
-        )
+    _check_year(admission_year)
     branch = branch_from_department(department)
     if branch is None:
         raise UsNValidationError(
