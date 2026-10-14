@@ -43,6 +43,17 @@ def check_raw(raw: dict, labels: dict, cfg: C.SimConfig, fail: list) -> dict:
             fail.append(msg)
 
     need(stu["student_id"].is_unique and stu["usn"].is_unique, "student ids / USNs not unique")
+    # ---- college identifier integrity (USN/email rules from the shared backend utility) ----
+    if "college_email" in stu.columns:
+        emails = stu["college_email"].fillna("")
+        nonempty = emails[emails != ""]
+        need(nonempty.is_unique, "duplicate college emails in students.csv")
+        for _usn, _em in zip(stu["usn"], emails):
+            if _em == "":
+                continue  # legacy SYN-format simulated USN: no college mailbox (documented)
+            if not (_em == str(_usn).lower() + "@kletech.ac.in"):
+                fail.append(f"college email {_em!r} does not match USN {_usn!r}")
+                break
     need(apps["application_id"].is_unique, "application ids not unique")
     need(txn["transaction_id"].is_unique, "transaction ids not unique")
     need(apps["student_id"].isin(stu["student_id"]).all(), "application -> student foreign key broken")

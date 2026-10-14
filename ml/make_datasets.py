@@ -5,15 +5,30 @@
 Steps: simulate raw tables -> write CSVs -> READ THEM BACK -> build model-ready datasets -> validate
 -> write dataset_summary.json (with SHA-256 checksums). Same seed => identical files.
 All data is SIMULATED; see docs/DATA_DICTIONARY.md.
+
+College identifiers (USN + email): students.csv additionally carries `college_email`, derived
+from each student's USN by the SHARED backend utility (app/core/usn.py) — never generated
+independently. Canonical 01FE-format USNs get their exact lowercase @kletech.ac.in address;
+legacy SYN-format simulated USNs have no college mailbox and stay empty (documented, not
+invented). CSVs are written atomically (temp file + os.replace) so an interrupted run cannot
+corrupt the previous dataset.
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 
 import pandas as pd
+
+# Shared USN/email utility from the backend package: single source of truth for identifier
+# rules across the app, data-generation scripts, the CSV pipeline and tests.
+_BACKEND_DIR = Path(__file__).resolve().parent.parent / "backend"
+if str(_BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_DIR))
+from app.core.usn import validate_usn, usn_to_email  # noqa: E402
 
 from . import config as C
 from .prepare import (build_anomaly_transactions, build_forecast_daily, build_risk_scoring,
@@ -31,6 +46,26 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _write_csv_atomic(df: pd.DataFrame, path: Path) -> None:
+    """Write a CSV so an interrupted operation can never leave a corrupted/partial target file."""
+    tmp = path.with_name(path.name + ".tmp")
+    df.to_csv(tmp, index=False)
+    os.replace(tmp, path)  # atomic on POSIX and Windows
+
+
+def add_college_emails(students: pd.DataFrame) -> pd.DataFrame:
+    """Derive `college_email` from `usn` with the shared utility (idempotent; preserves columns)."""
+    out = students.copy()
+    emails = []
+    for usn in out["usn"]:
+        if isinstance(usn, str) and validate_usn(usn.strip().upper()):
+            emails.append(usn_to_email(usn.strip().upper()))
+        else:
+            emails.append("")  # legacy/simulated USN: no college mailbox exists for it
+    out["college_email"] = emails
+    return out
+
+
 def _read_raw(out: Path) -> tuple[dict, dict]:
     raw = {name: pd.read_csv(out / "raw" / f"{name}.csv", parse_dates=dates) for name, dates in RAW_DATES.items()}
     labels = {
@@ -44,10 +79,11 @@ def run(cfg: C.SimConfig, out: Path = DATA_DIR, verbose: bool = True) -> tuple[d
     for sub in ("raw", "labels", "processed"):
         (out / sub).mkdir(parents=True, exist_ok=True)
     sim = simulate(cfg)
+    sim["students"] = add_college_emails(sim["students"])  # derived via the shared utility
     for name in RAW_DATES:
-        sim[name].to_csv(out / "raw" / f"{name}.csv", index=False)
+        _write_csv_atomic(sim[name], out / "raw" / f"{name}.csv")
     for name in ("application_labels", "transaction_labels"):
-        sim[name].to_csv(out / "labels" / f"{name}.csv", index=False)
+        _write_csv_atomic(sim[name], out / "labels" / f"{name}.csv")
 
     raw, labels = _read_raw(out)  # everything downstream uses the files on disk
     processed = {
@@ -58,7 +94,7 @@ def run(cfg: C.SimConfig, out: Path = DATA_DIR, verbose: bool = True) -> tuple[d
                                                            labels["transaction_labels"], cfg),
     }
     for name, df in processed.items():
-        df.to_csv(out / "processed" / f"{name}.csv", index=False)
+        _write_csv_atomic(df, out / "processed" / f"{name}.csv")
     processed = {  # validate what was actually written
         name: pd.read_csv(out / "processed" / f"{name}.csv", parse_dates=PROCESSED_DATES[name])
         for name in processed
