@@ -35,9 +35,11 @@ class UploadedDocument(Base):
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # --- Checklist / verification tracking -------------------------------------------
-    # document_category is a NON-persisted attribute (hybrid, like `extension` below): the
-    # checklist feature assigns categories at evaluation time from filename/OCR hints and
-    # reviewer decisions, so no database column/migration was needed for it.
+    # Checklist category is PERSISTED (see the `document_category` DB column added by revision
+    # 20261014_562d5a8aebea). Persistence is what lets a reviewer's decision survive across
+    # requests: without it, hint-based reassignment in a later request would silently move an
+    # already-verified document to a different checklist slot and break payment gating.
+    document_category: Mapped[str | None] = mapped_column(String(50), nullable=True)
     validation_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
     validation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     reviewed_by: Mapped[int | None] = mapped_column(
@@ -54,20 +56,6 @@ class UploadedDocument(Base):
     ocr_result: Mapped["OcrResult | None"] = relationship(
         cascade="all, delete-orphan", passive_deletes=True, uselist=False
     )
-
-    @hybrid_property
-    def document_category(self) -> str | None:  # type: ignore[no-redef]
-        """Checklist category for this upload — NON-persisted (no DB column, no migration).
-
-        Held on the instance only: hint-based assignment runs at checklist-evaluation time and
-        reviewer decisions re-assign it within the same request; nothing is cached across
-        requests. This keeps the feature fully additive to the existing schema.
-        """
-        return self.__dict__.get("_document_category")
-
-    @document_category.setter
-    def document_category(self, value: str | None) -> None:
-        self.__dict__["_document_category"] = value
 
     @hybrid_property
     def extension(self) -> str | None:  # type: ignore[no-redef]

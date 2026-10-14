@@ -133,7 +133,13 @@ _CHECKLISTS: dict[str, list[ChecklistItem]] = {
 }
 
 # Categories satisfied from the structured application-details form rather than a file upload.
-_FORM_ONLY_CATEGORIES = {"GRADE_CARD_PARTICULARS", "DELIVERY_DETAILS"}
+# STUDENT_DETAILS is form/profile-backed for every request type: the student's USN and personal
+# details come from the authenticated record (authoritative), not from an uploaded file — an
+# uploaded file can never satisfy this item, so it must not be allowed to squat on its slot.
+_FORM_ONLY_CATEGORIES = {"STUDENT_DETAILS", "GRADE_CARD_PARTICULARS", "DELIVERY_DETAILS"}
+
+# Which detail keys substantiate the profile-backed STUDENT_DETAILS item for every request type.
+_PROFILE_REQUIREMENTS = ["usn", "full_name", "department"]
 
 # Which detail keys substantiate each form-only category, per request type.
 _FORM_REQUIREMENTS: dict[str, dict[str, list[str]]] = {
@@ -144,6 +150,8 @@ _FORM_REQUIREMENTS: dict[str, dict[str, list[str]]] = {
 }
 
 # Keyword hints used ONLY to propose a category for a newly uploaded file (a hint, never a verdict).
+# NOTE: form/profile-backed categories (see _FORM_ONLY_CATEGORIES) are deliberately absent here —
+# no uploaded file may ever be hinted into the STUDENT_DETAILS / particulars / delivery slots.
 _CATEGORY_HINTS: dict[str, tuple[str, ...]] = {
     "POLICE_FIR": ("fir", "police"),
     "AFFIDAVIT": ("affidavit", "stamp"),
@@ -450,7 +458,12 @@ def evaluate_checklist(db: Session, application: Application, student: Student, 
         matching = [d for d in docs if getattr(d, "document_category", None) == item.category]
         statuses = [_effective_status(d, student, computed.get(d.id)) for d in matching]
         if item.category in _FORM_ONLY_CATEGORIES:
-            reqs = _FORM_REQUIREMENTS.get(application.document_type.code, {}).get(item.category, [])
+            if item.category == "STUDENT_DETAILS":
+                # Profile-backed for every request type: USN/name/department come from the
+                # authoritative authenticated student record, never from an uploaded file.
+                reqs = _PROFILE_REQUIREMENTS
+            else:
+                reqs = _FORM_REQUIREMENTS.get(application.document_type.code, {}).get(item.category, [])
             ok = all(_detail_present(application, key, student) for key in reqs)
             if ok:
                 status = ApplicationStatus.VERIFIED.value
