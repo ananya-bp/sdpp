@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from pydantic import field_validator
@@ -26,6 +27,44 @@ class Settings(BaseSettings):
     upload_dir: str = "uploads"  # relative paths are resolved against backend/
     max_upload_mb: int = 5
     max_files_per_application: int = 5  # maximum files per application (configurable)
+
+    # --- Eligibility policy configuration (externalised from the engine code) ---
+    # JSON dict mapping a rule name -> {"verified": bool}. The eligibility ENGINE decides how a
+    # named rule is evaluated; this setting only controls whether that rule counts as confirmed
+    # institutional policy. A failed VERIFIED mandatory rule -> NOT_ELIGIBLE; a failed UNVERIFIED
+    # rule -> MANUAL_REVIEW (never an automatic academic rejection). Unknown names in the JSON are
+    # ignored by the engine, so this can never invent new restrictions on its own.
+    # Defaults mirror the documented placeholder policy (see SDP_BUILD_GUIDE section 1.4 and the
+    # engine docstring): fee-clearance blocks every request type and zero backlogs is required for
+    # a Provisional Degree Certificate. These are the project's established working policy — the
+    # existing stored-status behaviour (NOT_ELIGIBLE on failure) is preserved by keeping them
+    # verified=true here. To reclassify either rule as unconfirmed institutional policy, set
+    # ELIGIBILITY_POLICY_JSON with "verified": false; failing rules then route to MANUAL_REVIEW
+    # instead of an automatic academic rejection. has_supporting_documents is a completeness check
+    # (an application with no documents cannot be processed), verified=true.
+    eligibility_policy_json: str = (
+        '{"fee_status_clear": {"verified": true},'
+        ' "no_outstanding_backlogs": {"verified": true},'
+        ' "has_supporting_documents": {"verified": true}}'
+    )
+
+    @field_validator("eligibility_policy_json")
+    @classmethod
+    def eligibility_policy_must_be_valid_json(cls, v: str) -> str:
+        parsed = json.loads(v)  # raises loudly at startup if misconfigured
+        if not isinstance(parsed, dict):
+            raise ValueError("ELIGIBILITY_POLICY_JSON must be a JSON object")
+        for name, cfg in parsed.items():
+            if not isinstance(cfg, dict) or not isinstance(cfg.get("verified"), bool):
+                raise ValueError(
+                    f"ELIGIBILITY_POLICY_JSON['{name}'] must be an object with a boolean 'verified'"
+                )
+        return v
+
+    @property
+    def eligibility_policy(self) -> dict[str, dict]:
+        """Parsed eligibility policy (re-read every call so runtime overrides apply live)."""
+        return json.loads(self.eligibility_policy_json)
 
     @field_validator("secret_key")
     @classmethod

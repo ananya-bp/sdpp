@@ -69,6 +69,9 @@ function buildSteps(app, processing, processError) {
     });
   } else if (s === "NOT_ELIGIBLE") {
     steps.push({ title: "Checking eligibility", state: "error", detail: "Not eligible" });
+  } else if (s === "MANUAL_REVIEW") {
+    // Backend routes uncertain evidence here; shown as review-in-progress, never as rejection.
+    steps.push({ title: "Checking eligibility", state: "active", detail: "Pending manual review" });
   } else {
     steps.push({ title: "Checking eligibility", state: "done", detail: "Eligible" });
   }
@@ -77,6 +80,7 @@ function buildSteps(app, processing, processError) {
   else if (s === "PAYMENT_PENDING") steps.push({ title: "Payment", state: "action", detail: "Payment not completed yet" });
   else if (PAID_OR_LATER.includes(s)) steps.push({ title: "Payment", state: "done", detail: "Payment received (sandbox)" });
   else if (s === "NOT_ELIGIBLE") steps.push({ title: "Payment", state: "pending", detail: "Not available for this application" });
+  else if (s === "MANUAL_REVIEW") steps.push({ title: "Payment", state: "pending", detail: "Available once the review is complete" });
   else steps.push({ title: "Payment", state: "pending", detail: "Available once you are eligible" });
 
   if (s === "UNDER_REVIEW") steps.push({ title: "Review and issue", state: "active", detail: "Under review" });
@@ -223,7 +227,9 @@ export default function ApplicationDetailPage() {
   const lastFailed = lastTxn && lastTxn.payment_status === "FAILED";
   const successTxn = app.transactions.find((t) => t.payment_status === "SUCCESS");
   const payable = s === "ELIGIBLE" || s === "PAYMENT_PENDING";
-  const reasons = s === "NOT_ELIGIBLE" && eligibility?.note ? eligibility.note.split("; ") : [];
+  // Backend routes uncertain evidence to MANUAL_REVIEW; surface its explanation without implying rejection.
+  const manualReview = s === "MANUAL_REVIEW" || eligibility?.status === "MANUAL_REVIEW";
+  const reasons = (s === "NOT_ELIGIBLE" || manualReview) && eligibility?.note ? eligibility.note.split("; ") : [];
   const stuck = !processing && processError; // processing failed unexpectedly (not a per-file OCR failure)
 
   return (
@@ -292,9 +298,28 @@ export default function ApplicationDetailPage() {
             <section className="card">
               <div className="card-head">
                 <h2>Eligibility</h2>
-                <StatusPill status={eligibility.status} label={eligibility.status === "ELIGIBLE" ? "Eligible" : "Not eligible"} />
+                <StatusPill status={eligibility.status} label={
+                  eligibility.status === "ELIGIBLE" ? "Eligible"
+                    : eligibility.status === "MANUAL_REVIEW" ? "Pending manual review"
+                    : "Not eligible"
+                } />
               </div>
-              {s === "NOT_ELIGIBLE" ? (
+              {eligibility.status === "MANUAL_REVIEW" ? (
+                <>
+                  <p>
+                    Your application could not be decided automatically and is pending staff review.
+                    This is <strong>not a rejection</strong> — payment will become available once the
+                    review is complete. Outstanding point{reasons.length === 1 ? "" : "s"}:
+                  </p>
+                  <ul className="reason-list">
+                    {reasons.map((r) => <li key={r}>{r}</li>)}
+                  </ul>
+                  <p className="hint" style={{ marginTop: 12 }}>
+                    Uncertain document reads or unconfirmed policy requirements are routed to manual
+                    review rather than treated as academic ineligibility.
+                  </p>
+                </>
+              ) : s === "NOT_ELIGIBLE" ? (
                 <>
                   <p>This application is not eligible, so payment is not available. Reason{reasons.length === 1 ? "" : "s"}:</p>
                   <ul className="reason-list">

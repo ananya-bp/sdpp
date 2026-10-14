@@ -1,3 +1,4 @@
+import json
 import logging
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -13,7 +14,7 @@ from app.services import eligibility as eligibility_service
 from app.services import ocr as ocr_service
 from app.services import payments as payment_service
 from app.services import processing as processing_service
-from app.services import uploads
+from app.services import request_specs, uploads
 
 logger = logging.getLogger(__name__)
 
@@ -23,16 +24,36 @@ router = APIRouter(prefix="/applications", tags=["applications"])
 @router.post("", response_model=ApplicationDetail, status_code=201)
 def submit_application(
     document_type_id: int = Form(...),
+    details: str = Form(default="{}"),
     files: list[UploadFile] = File(default=[]),
     student: Student = Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
-    """Submit an application for one document type, with optional supporting files (multipart form)."""
+    """Submit an application for one document type, with optional supporting files (multipart form).
+
+    `details` is a JSON object of request-specific form fields (see GET /api/config/forms); the
+    backend re-validates them per request type so requirements cannot be bypassed by calling the
+    API directly. Field/document problems return 422 with actionable field-level errors.
+    """
     document_type = db.get(DocumentType, document_type_id)
     if document_type is None or not document_type.is_active:
         raise HTTPException(400, "Unknown document type.")
 
+    try:
+        parsed_details = json.loads(details) if details else {}
+    except (ValueError, TypeError):
+        raise HTTPException(422, {"errors": ["'details' must be a JSON object."]})
+    if not isinstance(parsed_details, dict):
+        raise HTTPException(422, {"errors": ["'details' must be a JSON object."]})
+
     items = uploads.validate_uploads(files)  # raises 400/413 before anything is saved
+
+    spec_errors = request_specs.validate_submission(
+        document_type.code, parsed_details, {i.extension for i in items}
+    )
+    if spec_errors:
+        raise HTTPException(422, {"errors": spec_errors})
+
     application = service.create_application(db, student, document_type, items)
     return service.load_application(db, application.id, student.id)
 

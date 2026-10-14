@@ -46,13 +46,19 @@ def test_oversized_file_rejected(api, student_auth, doc_type, db_session, upload
     assert app_count(db_session, student) == 1
 
 
+def _distinct_pdfs(n):
+    """n valid PDFs with distinct content (so duplicate detection does not interfere)."""
+    return [(f"f{i}.pdf", b"%PDF-1.4\ndocument number " + bytes([i]) + b"\n%%EOF\n", "application/pdf")
+            for i in range(n)]
+
+
 def test_too_many_files_rejected(api, student_auth, doc_type, db_session):
     student, headers = student_auth
-    files = [(f"f{i}.pdf", PDF_BYTES, "application/pdf") for i in range(uploads.MAX_FILES_PER_APPLICATION + 1)]
+    limit = uploads.MAX_FILES_PER_APPLICATION  # dynamic: always the current centralized setting
+    files = _distinct_pdfs(limit + 1)
     assert submit(api, headers, doc_type.id, files).status_code == 400
     assert app_count(db_session, student) == 0
-    five = files[:-1]
-    assert submit(api, headers, doc_type.id, five).status_code == 201
+    assert submit(api, headers, doc_type.id, files[:limit]).status_code == 201
 
 
 def test_one_bad_file_means_nothing_saved(api, student_auth, doc_type, db_session, upload_dir):
@@ -86,8 +92,13 @@ def test_failure_while_saving_rolls_back_and_removes_files(api, student_auth, do
         return real_store(application_id, item)
 
     monkeypatch.setattr(uploads, "store_file", flaky)
+    # Two files with DIFFERENT content (same-name files would be de-duplicated before storage,
+    # so they would never reach store_file twice).
     with pytest.raises(OSError):
-        submit(api, headers, doc_type.id, [("a.pdf", PDF_BYTES, "application/pdf"), ("b.pdf", PDF_BYTES, "application/pdf")])
+        submit(api, headers, doc_type.id, [
+            ("a.pdf", b"%PDF-1.4\nfirst document body\n%%EOF\n", "application/pdf"),
+            ("b.pdf", b"%PDF-1.4\nsecond document body\n%%EOF\n", "application/pdf"),
+        ])
     assert app_count(db_session, student) == 0
     assert files_on_disk(upload_dir) == []
 
@@ -101,19 +112,12 @@ def test_file_count_limit_is_configurable_and_enforced(api, student_auth, doc_ty
     student, headers = student_auth
     monkeypatch.setattr(settings, "max_files_per_application", 2)
 
-    # 2 files → accepted under the new limit.
-    ok = submit(api, headers, doc_type.id, [
-        ("a.pdf", PDF_BYTES, "application/pdf"),
-        ("b.pdf", PDF_BYTES, "application/pdf"),
-    ])
+    # 2 distinct files → accepted under the new limit.
+    ok = submit(api, headers, doc_type.id, _distinct_pdfs(2))
     assert ok.status_code == 201, ok.text
 
-    # 3 files → rejected under the new limit.
-    bad = submit(api, headers, doc_type.id, [
-        ("c.pdf", PDF_BYTES, "application/pdf"),
-        ("d.pdf", PDF_BYTES, "application/pdf"),
-        ("e.pdf", PDF_BYTES, "application/pdf"),
-    ])
+    # 3 distinct files → rejected under the new limit.
+    bad = submit(api, headers, doc_type.id, _distinct_pdfs(3))
     assert bad.status_code == 400
     assert app_count(db_session, student) == 1  # only the first one was saved
 
@@ -138,3 +142,14 @@ def test_duplicate_file_rejected(api, student_auth, doc_type, db_session):
     assert r.status_code == 400
     assert "duplicate" in r.json()["detail"].lower()
 
+
+
+def test_same_file_sent_twice_under_same_name_is_stored_once(api, student_auth, doc_type, db_session):
+    """Accidental repeats of the identical file under its real name must not fail the request."""
+    _, headers = student_auth
+    r = submit(api, headers, doc_type.id, [
+        ("same.pdf", PDF_BYTES, "application/pdf"),
+        ("same.pdf", PDF_BYTES, "application/pdf"),
+    ])
+    assert r.status_code == 201, r.text
+    assert len(r.json()["documents"]) == 1

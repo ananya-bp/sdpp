@@ -8,13 +8,46 @@ import { useRequireAuth } from "../../lib/useRequireAuth";
 import { documentTypeInfo, formatBytes } from "../../lib/status";
 import { Alert, PageHeader, PageLoading } from "../components/ui";
 
-// These mirror the backend's upload rules (backend/app/services/uploads.py) for fast feedback only;
-// the backend re-validates everything (including the file's real content type).
-const MAX_FILES = 5;
-const MAX_MB = 5;
-const ALLOWED_EXT = ["pdf", "jpg", "jpeg", "png"];
+// Fallbacks ONLY — used if GET /api/config/limits cannot be reached. The authoritative values
+// come from the backend's centralized settings so the UI never keeps a conflicting copy.
+const FALLBACK_LIMITS = {
+  max_upload_mb: 5,
+  max_upload_bytes: 5 * 1024 * 1024,
+  max_files_per_application: 5,
+  allowed_extensions: ["jpeg", "jpg", "pdf", "png"],
+};
 
 const extOf = (name) => (name.includes(".") ? name.split(".").pop().toLowerCase() : "");
+
+// Map a backend field-spec input_type to an accessible control.
+function FieldControl({ spec, value, onChange, error }) {
+  const id = `detail-${spec.key}`;
+  const describedBy = `${id}-help${error ? ` ${id}-err` : ""}`;
+  return (
+    <div className="form-field">
+      <label htmlFor={id}>
+        {spec.label}
+        {spec.required && <span aria-hidden="true"> *</span>}
+        {!spec.verified && (
+          <span className="kle-badge" style={{ marginLeft: 8 }}>Unverified requirement</span>
+        )}
+      </label>
+      {spec.input_type === "select" ? (
+        <select id={id} value={value} onChange={(e) => onChange(e.target.value)}
+          aria-describedby={describedBy} aria-invalid={Boolean(error)}>
+          <option value="">— Select —</option>
+          {spec.options.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      ) : (
+        <input id={id} type="text" value={value} maxLength={spec.max_length || 200}
+          onChange={(e) => onChange(e.target.value)}
+          aria-describedby={describedBy} aria-invalid={Boolean(error)} />
+      )}
+      {spec.help_text && <p id={`${id}-help`} className="hint">{spec.help_text}</p>}
+      {error && <p id={`${id}-err`} className="field-error" role="alert">{error}</p>}
+    </div>
+  );
+}
 
 export default function ApplyPage() {
   const router = useRouter();
@@ -25,6 +58,10 @@ export default function ApplyPage() {
   const [files, setFiles] = useState([]);
   const [messages, setMessages] = useState([]); // validation messages for rejected files
   const [submitError, setSubmitError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({}); // server-side field-level errors by key
+  const [details, setDetails] = useState({}); // request-specific form values
+  const [limits, setLimits] = useState(FALLBACK_LIMITS);
+  const [formSpecs, setFormSpecs] = useState(null); // GET /api/config/forms payload
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -38,22 +75,32 @@ export default function ApplyPage() {
         if (types.length) setDocumentTypeId(String(types[0].id));
       })
       .catch((err) => setTypesError(err.message));
+    // Dynamic limits & form specs (fail soft to fallbacks / no extra fields if unavailable).
+    apiGet("/api/config/limits").then((l) => setLimits({ ...FALLBACK_LIMITS, ...l })).catch(() => {});
+    apiGet("/api/config/forms").then((f) => setFormSpecs(f)).catch(() => {});
   }, [ready]);
+
+  const selected = docTypes?.find((t) => String(t.id) === documentTypeId) || null;
+  const spec = formSpecs?.forms?.find((f) => f.code === selected?.code) || null;
 
   function addFiles(incoming) {
     const problems = [];
     const next = [...files];
+    const allowed = limits.allowed_extensions || FALLBACK_LIMITS.allowed_extensions;
+    const maxBytes = limits.max_upload_bytes || limits.max_upload_mb * 1024 * 1024 || FALLBACK_LIMITS.max_upload_bytes;
+    const maxFiles = limits.max_files_per_application ?? FALLBACK_LIMITS.max_files_per_application;
+    const extList = allowed.map((e) => e.toUpperCase()).join(", ");
     for (const f of incoming) {
-      if (!ALLOWED_EXT.includes(extOf(f.name))) {
-        problems.push(`“${f.name}” is not a PDF, JPG or PNG file.`);
-      } else if (f.size > MAX_MB * 1024 * 1024) {
-        problems.push(`“${f.name}” is larger than ${MAX_MB} MB.`);
+      if (!allowed.includes(extOf(f.name))) {
+        problems.push(`“${f.name}” is not an accepted file type (${extList}).`);
+      } else if (f.size > maxBytes) {
+        problems.push(`“${f.name}” is larger than ${limits.max_upload_mb ?? Math.round(maxBytes / 1048576)} MB.`);
       } else if (f.size === 0) {
         problems.push(`“${f.name}” is empty.`);
       } else if (next.some((x) => x.name === f.name && x.size === f.size)) {
         problems.push(`“${f.name}” has already been added.`);
-      } else if (next.length >= MAX_FILES) {
-        problems.push(`“${f.name}” was not added: at most ${MAX_FILES} files per application.`);
+      } else if (next.length >= maxFiles) {
+        problems.push(`“${f.name}” was not added: at most ${maxFiles} files per application.`);
       } else {
         next.push(f);
       }
@@ -91,17 +138,35 @@ export default function ApplyPage() {
     }
     submitting.current = true;
     setSubmitError("");
+    setFieldErrors({});
     setBusy(true);
     setProgress(0);
     try {
       const form = new FormData();
       form.append("document_type_id", documentTypeId);
+      // Request-specific fields (GET /api/config/forms). Sent as JSON; backend re-validates.
+      const cleanDetails = {};
+      for (const [k, v] of Object.entries(details)) if (String(v || "").trim()) cleanDetails[k] = String(v).trim();
+      form.append("details", JSON.stringify(cleanDetails));
       files.forEach((f) => form.append("files", f));
       const application = await apiPostFormWithProgress("/api/applications", form, setProgress);
       // Keep the form locked while navigating so the application cannot be submitted twice.
       router.push(`/applications/${application.id}?submitted=1`);
     } catch (err) {
-      setSubmitError(err.message);
+      // 422 spec errors arrive as { detail: { errors: [...] } } — surface them per field where possible.
+      const errs = err?.payload?.detail?.errors;
+      if (Array.isArray(errs)) {
+        const byKey = {};
+        const general = [];
+        for (const msg of errs) {
+          const match = spec?.fields?.find((f) => msg.startsWith(f.label + " ") || msg.startsWith(`${f.label}:`) || msg.startsWith(`${f.label} is`));
+          if (match) byKey[match.key] = msg; else general.push(msg);
+        }
+        setFieldErrors(byKey);
+        setSubmitError(general.join(" "));
+      } else {
+        setSubmitError(err.message);
+      }
       submitting.current = false;
       setBusy(false);
     }
@@ -117,11 +182,16 @@ export default function ApplyPage() {
     );
   }
 
-  const selected = docTypes.find((t) => String(t.id) === documentTypeId);
   const uploadDone = busy && progress >= 1;
+  const allowedExts = limits.allowed_extensions || FALLBACK_LIMITS.allowed_extensions;
+  const maxFiles = limits.max_files_per_application ?? FALLBACK_LIMITS.max_files_per_application;
+  const maxMb = limits.max_upload_mb ?? FALLBACK_LIMITS.max_upload_mb;
+  const extList = allowedExts.map((e) => e.toUpperCase()).join(", ");
+  const missingDocs = spec ? spec.documents.filter((d) => d.required &&
+    !files.some((f) => (["jpg", "jpeg"].includes(extOf(f.name)) ? ["jpg", "jpeg", "pdf", "png"].includes(d.code) : extOf(f.name) === d.code))) : [];
 
   return (
-    <main className="container narrow">
+    <main className="container narrow kle-theme">
       <Link href="/dashboard" className="back-link">← Back to dashboard</Link>
       <PageHeader
         title="New application"
@@ -139,7 +209,7 @@ export default function ApplyPage() {
               <label key={t.id} className="type-option">
                 <input type="radio" name="document_type" value={t.id}
                   checked={documentTypeId === String(t.id)}
-                  onChange={(e) => setDocumentTypeId(e.target.value)} />
+                  onChange={(e) => { setDocumentTypeId(e.target.value); setFieldErrors({}); }} />
                 <span className="box">
                   <strong>{t.name}</strong>
                   <span>{documentTypeInfo(t.code)}</span>
@@ -149,17 +219,51 @@ export default function ApplyPage() {
           </fieldset>
         </section>
 
+        {/* ---- request-specific details (from GET /api/config/forms) ---- */}
+        {spec && spec.fields.length > 0 && (
+          <section className="card">
+            <h2 style={{ marginBottom: 6 }}>
+              2. {spec.name} details{" "}
+              {!spec.policy_verified && <span className="kle-badge">Unverified requirements</span>}
+            </h2>
+            {!spec.policy_verified && (
+              <p className="hint" style={{ marginBottom: 12 }}>
+                These fields follow the portal&apos;s working configuration, which has not yet been
+                confirmed against official KLE Tech policy. Optional-looking required fields will not
+                block your submission until the policy is verified.
+              </p>
+            )}
+            {spec.fields.map((f) => (
+              <FieldControl key={f.key} spec={f} value={details[f.key] || ""}
+                error={fieldErrors[f.key]}
+                onChange={(v) => setDetails((d) => ({ ...d, [f.key]: v }))} />
+            ))}
+          </section>
+        )}
+
         <section className="card">
-          <h2 style={{ marginBottom: 6 }}>2. Attach supporting documents</h2>
+          <h2 style={{ marginBottom: 6 }}>{spec && spec.fields.length > 0 ? "3" : "2"}. Attach supporting documents</h2>
           <p className="muted small">
             At least one file is required{selected ? ` for ${selected.name}` : ""}. Your files are read
             automatically after submission, so please upload clear, legible scans or photos.
           </p>
           <ul className="checklist" style={{ marginBottom: 14 }}>
-            <li>Accepted formats: PDF, JPG or PNG</li>
-            <li>Up to {MAX_FILES} files, {MAX_MB} MB each</li>
+            <li>Accepted formats: {extList}</li>
+            <li>Up to {maxFiles} files, {maxMb} MB each</li>
             <li>Make sure text is sharp and not cropped</li>
+            {spec && spec.documents.map((d, i) => (
+              <li key={`${d.code}-${i}`}>
+                {d.label} {d.required ? "(required)" : "(optional)"}
+                {!d.verified && <span className="kle-badge" style={{ marginLeft: 6 }}>Unverified</span>}
+              </li>
+            ))}
           </ul>
+          {missingDocs.length > 0 && (
+            <p className="field-error" role="status">
+              Not attached yet: {missingDocs.map((d) => d.label).join("; ")}.
+              {!spec.policy_verified && " (Checklist items marked unverified do not block submission.)"}
+            </p>
+          )}
 
           <label
             className={`dropzone ${dragging ? "drag" : ""}`}
@@ -167,9 +271,11 @@ export default function ApplyPage() {
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
           >
-            <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png" onChange={onPick} disabled={busy} />
+            <input type="file" multiple
+              accept={allowedExts.map((e) => `.${e}`).join(",")}
+              onChange={onPick} disabled={busy} />
             <strong>Choose files or drag them here</strong>
-            <span className="muted small">PDF, JPG or PNG · up to {MAX_MB} MB each</span>
+            <span className="muted small">{extList} · up to {maxMb} MB each · max {maxFiles} files</span>
           </label>
 
           {messages.length > 0 && (

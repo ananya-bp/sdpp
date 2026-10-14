@@ -84,6 +84,8 @@ export function apiPostAuth(path, body) {
 
 // Multipart upload with progress. fetch() cannot report upload progress, so this uses XHR.
 // onProgress receives a fraction 0..1 of the request body that has been sent.
+// On error responses the parsed JSON body is attached as err.payload so callers can read
+// structured field-level errors (e.g. { detail: { errors: [...] } } from POST /api/applications).
 export function apiPostFormWithProgress(path, formData, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -110,7 +112,9 @@ export function apiPostFormWithProgress(path, formData, onProgress) {
       let message = `Request failed (${xhr.status})`;
       if (body && typeof body.detail === "string") message = body.detail;
       else if (body && Array.isArray(body.detail) && body.detail[0]?.msg) message = body.detail[0].msg;
-      reject(new ApiError(xhr.status, message));
+      const error = new ApiError(xhr.status, message);
+      error.payload = body; // structured errors for field-level display
+      reject(error);
     };
     xhr.send(formData);
   });
