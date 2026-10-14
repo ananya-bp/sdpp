@@ -6,8 +6,11 @@ Create Date: 2026-10-14
 
 Additive-only migration for the document-based eligibility feature:
 - applications.details_json (request-specific submission fields)
-- uploaded_documents validation/reviewer/version tracking columns
+- uploaded_documents checklist category, validation/reviewer/version tracking columns
 All columns are nullable or server-defaulted so existing rows upgrade without data loss.
+`document_category` is persisted so a reviewer's classification survives across requests
+(a non-persisted attribute would let later hint-based reassignment silently move an
+already-verified document out of its checklist slot and break payment gating).
 """
 from typing import Sequence, Union
 
@@ -27,6 +30,7 @@ def upgrade() -> None:
         batch_op.add_column(sa.Column('details_json', sa.Text(), nullable=True))
 
     with op.batch_alter_table('uploaded_documents') as batch_op:
+        batch_op.add_column(sa.Column('document_category', sa.String(length=50), nullable=True))
         batch_op.add_column(sa.Column('validation_status', sa.String(length=30), nullable=True))
         batch_op.add_column(sa.Column('validation_reason', sa.Text(), nullable=True))
         batch_op.add_column(sa.Column('reviewed_by', sa.Integer(), nullable=True))
@@ -53,6 +57,7 @@ def downgrade() -> None:
         batch_op.drop_constraint('fk_uploaded_documents_replaces_document_id_uploaded_documents', type_='foreignkey')
         batch_op.drop_constraint('fk_uploaded_documents_reviewed_by_users', type_='foreignkey')
         batch_op.drop_column('replaces_document_id')
+        batch_op.drop_column('document_category')
         batch_op.drop_column('version')
         batch_op.drop_column('verified_at')
         batch_op.drop_column('reviewed_at')
