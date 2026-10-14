@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -32,12 +33,22 @@ export default function NavBar() {
   );
 
   return (
-    <header className="topbar">
+    // kle-theme scopes the KLE branding to this student-facing header only.
+    <div className="kle-theme">
+    <header className="topbar topbar-kle">
       <div className="topbar-inner">
         <Link href="/" className="brand">
-          <span className="brand-mark" aria-hidden="true">UD</span>
-          <span className="brand-text">
-            University Document Portal
+          {/* Original KLE Tech logo PNG (public/logo.png), native 400x70 aspect ratio preserved. */}
+          <Image
+            src="/logo.png"
+            alt="KLE Technological University logo"
+            width={400}
+            height={70}
+            className="kle-logo"
+            priority
+          />
+          <span className="brand-text kle-brand-text">
+            KLE Tech — Student Document Portal
             <small>Academic document services</small>
           </span>
         </Link>
@@ -58,18 +69,19 @@ export default function NavBar() {
             <>
               {link("/dashboard", "Dashboard")}
               {link("/apply", "New application")}
-              <button type="button" className="btn btn-outline-light btn-sm" onClick={signOut}>
+              <button type="button" className="btn btn-sm" onClick={signOut}>
                 Sign out
               </button>
             </>
           ) : (
             <>
               {link("/login", "Sign in")}
-              <Link href="/register" className="btn btn-light btn-sm">Register</Link>
+              <Link href="/register" className="btn btn-sm">Register</Link>
             </>
           )}
         </nav>
       </div>
     </header>
+    </div>
   );
 }

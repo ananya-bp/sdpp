@@ -29,7 +29,10 @@ export default function HomePage() {
       <section className="hero">
         <div className="hero-inner">
           <div>
-            <p className="eyebrow" style={{ color: "#b9c8ea" }}>Academic document services</p>
+            {/* Student-facing KLE branding: original logo PNG, aspect ratio preserved. */}
+            <img src="/logo.png" alt="KLE Technological University logo" width={400} height={70}
+              style={{ height: 56, width: "auto", maxWidth: "90%", marginBottom: 14 }} />
+            <p className="eyebrow" style={{ color: "#f2c9cb" }}>KLE Tech · Academic document services</p>
             <h1>Request your academic documents online</h1>
             <p className="lead">
               Apply for transcripts, certificates and grade cards in one place. Upload your

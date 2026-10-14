@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import anomaly, applications, auth, document_types, forecast, health, risk
+from app.api.routes import anomaly, applications, auth, config, document_types, forecast, health, risk
 from app.core.config import settings
 
 app = FastAPI(title=settings.app_name, version="0.2.0")
@@ -15,6 +15,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router, prefix="/api")
+app.include_router(config.router, prefix="/api")
 app.include_router(document_types.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(applications.router, prefix="/api")

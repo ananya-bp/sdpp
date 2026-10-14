@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, func
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -30,3 +31,31 @@ class UploadedDocument(Base):
     ocr_result: Mapped["OcrResult | None"] = relationship(
         cascade="all, delete-orphan", passive_deletes=True, uselist=False
     )
+
+    @hybrid_property
+    def extension(self) -> str | None:  # type: ignore[no-redef]
+        """Normalised extension (pdf/jpg/jpeg/png) — not a DB column, no migration needed.
+
+        For in-flight upload objects (before INSERT) this returns the validated extension of
+        the file content that was attached at construction time; for rows loaded from the
+        database it is derived from stored_path (which ends in the validated extension).
+        Used to check request-specific required-document types.
+        """
+        attached = self.__dict__.get("_upload_extension")
+        if attached is not None:
+            return attached
+        path = self.stored_path or ""
+        _, _, ext = path.rpartition(".")
+        return ext.lower() or None
+
+    @extension.setter
+    def extension(self, value: str | None) -> None:
+        # Store in the instance __dict__ under a private key so SQLAlchemy's attribute events
+        # never see an unmapped write on a persistent object.
+        self.__dict__["_upload_extension"] = value
+
+    @extension.inplace.expression
+    @classmethod
+    def _extension_expression(cls):
+        """SQL-side equivalent, so filter/order_by on the class also work."""
+        return func.lower(func.substring_index(cls.__table__.c.stored_path, ".", -1))

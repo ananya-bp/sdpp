@@ -3,6 +3,10 @@
 Central upload limits (file count and file size) live in app.core.config.Settings and can be
 configured via environment variables MAX_FILES_PER_APPLICATION and MAX_UPLOAD_MB.
 Both the backend and the frontend derive their limits from those values.
+
+The limits are exposed through module-level ``__getattr__`` so that consumers importing
+``MAX_FILES_PER_APPLICATION`` / ``MAX_UPLOAD_BYTES`` always read the *current* settings value,
+never an import-time snapshot (tests monkeypatch settings at runtime).
 """
 import hashlib
 import os
@@ -14,9 +18,34 @@ from fastapi import HTTPException, UploadFile
 
 from app.core.config import settings
 
-# Module-level alias so `uploads.MAX_FILES_PER_APPLICATION` works without calling Settings.
-# Resolved at import time: safe because settings is a singleton.
-MAX_FILES_PER_APPLICATION = settings.max_files_per_application
+
+def _module_getattr(name: str):
+    """Module-level fallback: dynamic constants that track the live centralized settings.
+
+    Consumers importing ``MAX_FILES_PER_APPLICATION`` / ``MAX_UPLOAD_BYTES`` from this module
+    always get the current settings value, never an import-time snapshot. Internal code reads
+    the settings directly via _max_files() / _max_upload_bytes() below.
+    """
+    if name == "MAX_FILES_PER_APPLICATION":
+        return settings.max_files_per_application
+    if name == "MAX_UPLOAD_BYTES":
+        return settings.max_upload_bytes
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+import sys  # noqa: E402  (must run at import time: installs the dynamic constants)
+
+sys.modules[__name__].__getattr__ = _module_getattr
+
+
+def _max_files() -> int:
+    """Current per-application file-count limit (live setting, never an import-time snapshot)."""
+    return settings.max_files_per_application
+
+
+def _max_upload_bytes() -> int:
+    """Current per-file size limit in bytes (live setting; 5 MB = 5 * 1024 * 1024 by default)."""
+    return settings.max_upload_bytes
 
 # extension -> (content type, required leading bytes). The real file type is decided from the
 # file's own bytes, never from the browser-supplied content type.
@@ -27,6 +56,7 @@ _TYPES = {
     "png": ("image/png", (b"\x89PNG\r\n\x1a\n",)),
 }
 ALLOWED_DESCRIPTION = "PDF, JPG or PNG"
+ALLOWED_EXTENSIONS = frozenset(_TYPES)  # pdf, jpg, jpeg, png — single source of truth
 
 
 @dataclass
@@ -54,8 +84,10 @@ def validate_upload(upload: UploadFile) -> ValidatedUpload:
         raise HTTPException(400, f"'{filename}': only {ALLOWED_DESCRIPTION} files are allowed.")
 
     # Read one byte past the limit so an oversized file is detected without loading all of it.
-    data = upload.file.read(settings.max_upload_bytes + 1)
-    if len(data) > settings.max_upload_bytes:
+    # _max_upload_bytes() always resolves to the *current* centralized setting.
+    limit_bytes = _max_upload_bytes()
+    data = upload.file.read(limit_bytes + 1)
+    if len(data) > limit_bytes:
         raise HTTPException(413, f"'{filename}': file is larger than {settings.max_upload_mb} MB.")
     if not data:
         raise HTTPException(400, f"'{filename}': file is empty.")
@@ -68,24 +100,39 @@ def validate_upload(upload: UploadFile) -> ValidatedUpload:
 
 
 def validate_uploads(uploads: list[UploadFile]) -> list[ValidatedUpload]:
-    """Validate a batch of uploads: type, signature, size, count, and duplicates."""
+    """Validate a batch of uploads: type, signature, size, count, and duplicates.
+
+    Duplicate policy (compatible with the existing workflow):
+    - The same file (same name AND same bytes) sent twice in one request is treated as an
+      accidental repeat — it is stored once instead of failing the whole application.
+    - Identical bytes uploaded under DIFFERENT names are rejected: that pattern indicates a
+      student trying to pass one document off as two separate supporting documents.
+    """
     # Browsers send an empty file part when no file was chosen; ignore those.
     real = [u for u in uploads if u.filename]
-    limit = settings.max_files_per_application
-    if len(real) > limit:
-        raise HTTPException(400, f"At most {limit} files can be uploaded per application.")
+    limit = _max_files()  # live: current centralized setting
 
     validated: list[ValidatedUpload] = []
-    seen_hashes: set[str] = set()
+    seen_exact: set[tuple[str, int]] = set()   # (filename, size) already accepted this batch
+    seen_content: dict[str, str] = {}          # sha256 -> filename it first appeared with
     for u in real:
-        item = validate_upload(u)
+        item = validate_upload(u)  # also enforces the per-file size limit
+        key = (item.original_filename, len(item.data))
+        if key in seen_exact:
+            continue  # same file sent twice under the same name: keep one copy
         h = item.sha256
-        if h in seen_hashes:
+        previous = seen_content.get(h)
+        if previous is not None:
             raise HTTPException(
-                400, f"'{item.original_filename}': duplicate file — this file has already been added."
+                400,
+                f"'{item.original_filename}': duplicate file — the same content was already "
+                f"added as '{previous}'.",
             )
-        seen_hashes.add(h)
+        seen_content[h] = item.original_filename
+        seen_exact.add(key)
         validated.append(item)
+        if len(validated) > limit:
+            raise HTTPException(400, f"At most {limit} files can be uploaded per application.")
     return validated
 
 

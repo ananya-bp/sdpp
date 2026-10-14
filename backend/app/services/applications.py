@@ -91,6 +91,8 @@ def create_application(
                     stored_path=relative,
                     content_type=item.content_type,
                     size_bytes=len(item.data),
+                    # non-persisted hybrid attribute: validated extension of the file content
+                    extension=item.extension,
                 )
             )
         db.commit()

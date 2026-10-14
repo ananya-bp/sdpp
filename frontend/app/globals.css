@@ -19,6 +19,57 @@
   --sans: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
+/* ---------- KLE Tech student-facing theme (scoped) ----------
+   Applied ONLY under .kle-theme wrappers on student pages (see app/kle-theme.jsx).
+   Every selector below is prefixed with .kle-theme, so admin pages and shared
+   components are unaffected unless they opt in. Colors are derived from the
+   official logo's red branding + dark typography over neutral backgrounds. */
+.kle-theme {
+  --kle-red: #a2181c;
+  --kle-red-dark: #7e1215;
+  --kle-red-ink: #5f0d10;
+  --kle-red-tint: #fbf1f1;
+  --kle-red-line: #e6c9ca;
+  --kle-ink: #231c1d;
+  --kle-muted: #6b5f60;
+  --kle-bg: #faf7f6;
+  --kle-card: #ffffff;
+  --kle-line: #e6dedd;
+}
+.kle-theme, .kle-theme a { color: var(--kle-ink); }
+.kle-theme h1, .kle-theme h2, .kle-theme h3 { color: var(--kle-red-ink); }
+.kle-theme.muted, .kle-theme .muted { color: var(--kle-muted); }
+.kle-theme .card { background: var(--kle-card); border: 1px solid var(--kle-line); box-shadow: 0 1px 3px rgba(95, 13, 16, 0.06); }
+.kle-theme .btn { background: var(--kle-red); border-color: var(--kle-red); color: #fff; }
+.kle-theme .btn:hover:not(:disabled) { background: var(--kle-red-dark); border-color: var(--kle-red-dark); color: #fff; }
+.kle-theme .btn:focus-visible { outline: 3px solid #d98a8d; outline-offset: 2px; }
+.kle-theme .btn-secondary { background: #fff; color: var(--kle-red-ink); border-color: var(--kle-line); }
+.kle-theme .btn-secondary:hover:not(:disabled) { background: var(--kle-red-tint); }
+.kle-theme label { color: var(--kle-ink); }
+.kle-theme input, .kle-theme select, .kle-theme textarea { border-color: var(--kle-line); color: var(--kle-ink); background: #fff; }
+.kle-theme input:focus-visible, .kle-theme select:focus-visible, .kle-theme textarea:focus-visible { outline: 3px solid #d98a8d; outline-offset: 1px; border-color: var(--kle-red); }
+.kle-theme .pill-info { background: var(--kle-red-tint); color: var(--kle-red-ink); }
+.kle-theme .alert-danger { border-left-color: var(--kle-red); }
+.kle-theme .dropzone { border-color: var(--kle-line); background: var(--kle-bg); }
+.kle-theme .dropzone.drag { border-color: var(--kle-red); background: var(--kle-red-tint); }
+.kle-theme .progress div { background: var(--kle-red); }
+.kle-theme .type-option .box { border-color: var(--kle-line); }
+.kle-theme .type-option input:checked + .box { border-color: var(--kle-red); background: var(--kle-red-tint); }
+.kle-theme .topbar-kle { background: #fff; border-bottom: 3px solid var(--kle-red); color: var(--kle-ink); }
+.kle-theme .topbar-kle a, .kle-theme .topbar-kle { color: var(--kle-ink); }
+/* nav links + brand text on the white KLE header (scoped; base navy styles untouched) */
+.kle-theme .topbar-kle .nav-links a { color: var(--kle-ink); }
+.kle-theme .topbar-kle .nav-links a:hover,
+.kle-theme .topbar-kle .nav-links a.active { color: var(--kle-red); }
+.kle-theme .topbar-kle .brand, .kle-theme .topbar-kle .brand:hover { color: var(--kle-ink); }
+.kle-theme .topbar-kle .brand-text small { color: var(--kle-muted); }
+.kle-theme .nav-toggle span { background: var(--kle-ink); }
+.kle-theme .kle-logo { display: block; height: 44px; width: auto; max-width: 210px; } /* original 400x70 aspect ratio preserved */
+.kle-theme .kle-badge { display: inline-block; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--kle-red-ink); background: var(--kle-red-tint); border: 1px solid var(--kle-red-line); border-radius: 999px; padding: 1px 9px; }
+.kle-theme .field-error { color: var(--kle-red-dark); font-size: 0.85rem; margin: 2px 0 6px; }
+.kle-theme .form-section-title { color: var(--kle-red-ink); }
+@media (max-width: 640px) { .kle-theme .kle-logo { height: 34px; max-width: 160px; } }
+
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {

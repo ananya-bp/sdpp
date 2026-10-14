@@ -42,11 +42,12 @@ Current policy (placeholder):
   6. If any document produced very few words (< 5), route to MANUAL_REVIEW: the upload may
      be unreadable or the wrong document.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.statuses import ApplicationStatus
 from app.models import Application, Student
 
@@ -157,6 +158,24 @@ class EligibilityOutcome:
         return self.decision == EligibilityDecision.ELIGIBLE
 
 
+def _configured_conditions(code: str) -> list[Condition]:
+    """Conditions for a document type with `verified` flags applied from central settings.
+
+    The rule SET (which checks exist per document type) stays in code; the policy setting
+    (settings.eligibility_policy, i.e. ELIGIBILITY_POLICY_JSON) decides whether each named rule
+    counts as confirmed institutional policy. Rules absent from the config keep their in-code
+    default. Reading live settings means a policy change takes effect without redeploying code.
+    """
+    policy = settings.eligibility_policy
+    out: list[Condition] = []
+    for cond in COMMON_CONDITIONS + RULES_BY_DOCUMENT_TYPE.get(code, []):
+        cfg = policy.get(cond.name)
+        if cfg is not None and cfg["verified"] != cond.verified:
+            cond = replace(cond, verified=cfg["verified"])
+        out.append(cond)
+    return out
+
+
 def evaluate(application: Application, student: Student) -> EligibilityOutcome:
     """Evaluate every condition for this application's document type.
 
@@ -165,7 +184,7 @@ def evaluate(application: Application, student: Student) -> EligibilityOutcome:
     """
     # 1. Run mandatory conditions (academic / administrative eligibility).
     code = application.document_type.code
-    conditions = COMMON_CONDITIONS + RULES_BY_DOCUMENT_TYPE.get(code, [])
+    conditions = _configured_conditions(code)
     failed_names: list[str] = []
     failed_reasons: list[str] = []
     unverified_names: list[str] = []
@@ -191,6 +210,14 @@ def evaluate(application: Application, student: Student) -> EligibilityOutcome:
     ocr_issues = _ocr_evidence_issues(application)
     if ocr_issues or unverified_names:
         review_reasons = ocr_issues[:]
+        # Identify each unverified failing condition with its own explanation (student-safe
+        # text, same strings used for verified failures), then state the policy caveat.
+        for name in unverified_names:
+            idx = failed_names.index(name)
+            review_reasons.append(
+                f"{failed_reasons[idx]} This condition could not be automatically "
+                "verified (policy unconfirmed)."
+            )
         if unverified_names:
             review_reasons.append(
                 f"Conditions {unverified_names} could not be automatically verified "
