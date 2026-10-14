@@ -66,12 +66,15 @@ def create_application(
     student: Student,
     document_type: DocumentType,
     items: list[uploads.ValidatedUpload],
+    details_json: str | None = None,
 ) -> Application:
     """Create the application, its first history row and its files in one unit.
 
     If anything fails, the database work is rolled back and any files already written are removed.
     """
-    application = Application(student_id=student.id, document_type_id=document_type.id)
+    application = Application(
+        student_id=student.id, document_type_id=document_type.id, details_json=details_json
+    )
     db.add(application)
     db.flush()  # assigns application.id
     set_status(

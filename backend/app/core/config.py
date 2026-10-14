@@ -66,6 +66,15 @@ class Settings(BaseSettings):
         """Parsed eligibility policy (re-read every call so runtime overrides apply live)."""
         return json.loads(self.eligibility_policy_json)
 
+    # --- Document-checklist conditional requirements (configurable university policy) ---
+    # "if required by the university" items from the official requirement lists. Defaults are OFF:
+    # a conditional document is NEVER silently treated as universally mandatory. An authorized
+    # administrator flips these via environment variables once the policy is confirmed; the
+    # checklist and payment gate read them live (no restart-dependent snapshots).
+    transcript_requires_gov_id: bool = False
+    transcript_requires_no_dues: bool = False
+    pdc_requires_no_dues: bool = False
+
     @field_validator("secret_key")
     @classmethod
     def secret_key_must_be_real(cls, v: str) -> str:

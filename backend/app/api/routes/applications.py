@@ -7,9 +7,10 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_student
 from app.core.statuses import ApplicationStatus
 from app.db.session import get_db
-from app.models import DocumentType, Student
+from app.models import DocumentType, Student, UploadedDocument
 from app.schemas.application import ApplicationDetail, ApplicationSummary, PaymentCompleteIn
 from app.services import applications as service
+from app.services import document_checklist
 from app.services import eligibility as eligibility_service
 from app.services import ocr as ocr_service
 from app.services import payments as payment_service
@@ -54,8 +55,57 @@ def submit_application(
     if spec_errors:
         raise HTTPException(422, {"errors": spec_errors})
 
-    application = service.create_application(db, student, document_type, items)
+    application = service.create_application(db, student, document_type, items, details_json=json.dumps(parsed_details))
     return service.load_application(db, application.id, student.id)
+
+
+@router.post("/{application_id}/documents/{document_id}/replace", response_model=ApplicationDetail)
+def replace_document(
+    application_id: int,
+    document_id: int,
+    file: UploadFile = File(...),
+    student: Student = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """Replace one uploaded document (e.g. after rejection).
+
+    The old row is deleted with its OCR result and file; the replacement keeps the checklist
+    category but starts verification again from scratch, so any previous VERIFIED status for it
+    is invalidated and payment stays blocked until it validates. Ownership is enforced by
+    loading the application through the student's own record only.
+    """
+    application = service.load_application(db, application_id, student.id)
+    if application is None:
+        raise HTTPException(404, "Application not found.")
+    old = next((d for d in application.documents if d.id == document_id), None)
+    if old is None:
+        raise HTTPException(404, "Document not found on this application.")
+
+    items = uploads.validate_uploads([file])  # raises 400/413 before anything is saved
+    item = items[0]
+
+    relative = uploads.store_file(application.id, item)
+    try:
+        new_doc = UploadedDocument(
+            application_id=application.id,
+            original_filename=item.original_filename,
+            stored_path=relative,
+            content_type=item.content_type,
+            size_bytes=len(item.data),
+            extension=item.extension,
+            document_category=old.document_category,   # keep its place on the checklist
+            validation_status=None,                    # -> treated as Uploaded; revalidated
+            version=(old.version or 1) + 1,
+            replaces_document_id=old.id,
+        )
+        db.add(new_doc)
+        db.delete(old)
+        db.commit()
+    except Exception:
+        uploads.remove_stored_files([relative])
+        db.rollback()
+        raise
+    return service.load_application(db, application_id, student.id)
 
 
 @router.get("", response_model=list[ApplicationSummary])
@@ -159,6 +209,45 @@ def run_eligibility(
     return service.load_application(db, application_id, student.id)
 
 
+@router.get("/{application_id}/checklist")
+def get_checklist(
+    application_id: int,
+    student: Student = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """The document checklist for this application's request type, with current upload status.
+
+    Read-only view (no persistence side effects) so opening it never changes validation state.
+    """
+    application = service.load_application(db, application_id, student.id)
+    if application is None:
+        raise HTTPException(404, "Application not found.")
+    result = document_checklist.evaluate_checklist(db, application, student, persist=False)
+    return {
+        **document_checklist.checklist_payload(application.document_type.code),
+        "evaluation": result,
+    }
+
+
+@router.post("/{application_id}/checklist/check")
+def check_eligibility(
+    application_id: int,
+    student: Student = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """"Check Eligibility": run automated document verification and evaluate the checklist.
+
+    Persists newly derived statuses. Missing documents, rejected files and items awaiting
+    review are reported explicitly; payment remains blocked until every mandatory item is
+    Verified.
+    """
+    application = service.load_application(db, application_id, student.id)
+    if application is None:
+        raise HTTPException(404, "Application not found.")
+    result = document_checklist.evaluate_checklist(db, application, student)
+    return result
+
+
 @router.post("/{application_id}/payment/initiate", response_model=ApplicationDetail)
 def initiate_payment(
     application_id: int,
@@ -167,7 +256,14 @@ def initiate_payment(
 ):
     """Start a mock/sandbox payment - see app/services/payments.py. Only an ELIGIBLE application
     can start paying (an ineligible one must stop here); a PAYMENT_PENDING application can call
-    this again to retry after a failed attempt."""
+    this again to retry after a failed attempt.
+
+    DOCUMENT CHECKLIST GATE (authoritative, server-side): before any transaction row is created
+    the checklist is re-evaluated from database records — every mandatory document uploaded,
+    validated and Verified (or reviewer-approved). Frontend eligibility flags are never trusted.
+    A retry on an existing PAYMENT_PENDING application re-checks too, so eligibility that
+    changed after the order was created blocks further payment attempts.
+    """
     application = service.load_application(db, application_id, student.id)
     if application is None:
         raise HTTPException(404, "Application not found.")
@@ -176,6 +272,21 @@ def initiate_payment(
             400,
             f"Cannot start payment on an application with status '{application.status}'. "
             "The application must be ELIGIBLE first.",
+        )
+    checklist_result = document_checklist.evaluate_checklist(db, application, student)
+    if not checklist_result["eligible_for_payment"]:
+        raise HTTPException(
+            422,
+            {
+                "message": "Payment is blocked until every required document has been uploaded and verified.",
+                "outstanding_requirements": checklist_result["blocking_messages"],
+                "progress": checklist_result["progress"],
+                "items": [
+                    {"category": i["category"], "label": i["label"], "required": i["required"],
+                     "status": i["status"], "reason": i["note"]}
+                    for i in checklist_result["items"] if i["required"]
+                ],
+            },
         )
     payment_service.initiate_payment(db, application, changed_by=student.user_id)
     return service.load_application(db, application_id, student.id)
