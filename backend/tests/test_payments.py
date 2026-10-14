@@ -37,10 +37,14 @@ def _review_headers(api, db_session):
     from app.models.student import Student
     from app.models.user import User
 
-    admin = db_session.scalar(
+    # NOTE: no commits here. The API TestClient runs in its own thread; committing the shared
+    # test session from the main thread releases the connection back to the pool mid-request and
+    # caused intermittent cross-thread state corruption. Everything stays inside the outer
+    # transaction that conftest rolls back at teardown, so each test gets a fresh reviewer.
+    user = db_session.scalar(
         select(User).join(Student, Student.user_id == User.id).where(Student.usn == "01FE23BCS900")
     )
-    if admin is None:
+    if user is None:
         student = Student(usn="01FE23BCS900", full_name="Reviewer One",
                           department="Computer Science and Engineering", semester=8, cgpa="9.00")
         db_session.add(student)
@@ -49,10 +53,11 @@ def _review_headers(api, db_session):
             "usn": "01FE23BCS900", "email": "01fe23bcs900@kletech.ac.in",
             "password": REVIEWER_PASSWORD})
         assert r.status_code == 201, r.text
-        admin = db_session.scalar(select(User).where(User.email == "01fe23bcs900@kletech.ac.in"))
-        admin.role = "admin"
-        db_session.commit()
-    r = api.post("/api/auth/login", json={"email": admin.email, "password": REVIEWER_PASSWORD})
+        user = db_session.scalar(select(User).where(Student.usn == "01FE23BCS900").join(
+            Student, Student.user_id == User.id))
+        user.role = "admin"
+        db_session.flush()
+    r = api.post("/api/auth/login", json={"email": user.email, "password": REVIEWER_PASSWORD})
     assert r.status_code == 200, r.text
     return {"Authorization": "Bearer " + r.json()["access_token"]}
 
@@ -104,19 +109,25 @@ def to_eligible(api, usn, doc_code, db_session):
     assert r.json()["status"] == "ELIGIBLE", r.json()
 
     # Checklist gate: anything still Under Review needs an explicit reviewer approval.
-    result = api.post(f"/api/applications/{app_id}/checklist/check", headers=headers).json()
-    if not result["eligible_for_payment"]:
-        reviewer = _review_headers(api, db_session)
+    reviewer = None
+    for _round in range(4):  # approvals can reveal further pending docs; loop until stable
+        result = api.post(f"/api/applications/{app_id}/checklist/check", headers=headers).json()
+        if result["eligible_for_payment"]:
+            break
+        if reviewer is None:
+            reviewer = _review_headers(api, db_session)
         docs_pending = []
         for item in result["items"]:
             if item["required"] and item["status_code"] == ApplicationStatus.OCR_COMPLETED.value:
                 for d in item["documents"]:
-                    docs_pending.append((d["id"], item["category"]))
+                    if d.get("status_code") == ApplicationStatus.OCR_COMPLETED.value:
+                        docs_pending.append((d["id"], item["category"]))
+        if not docs_pending:
+            break
         for doc_id, category in docs_pending:
             ra = api.post(f"/api/review/documents/{doc_id}/approve", headers=reviewer,
                           json={"category": category})
             assert ra.status_code == 200, ra.text
-        result = api.post(f"/api/applications/{app_id}/checklist/check", headers=headers).json()
     assert result["eligible_for_payment"], result["blocking_messages"]
     return app_id, headers
 
