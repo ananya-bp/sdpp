@@ -56,6 +56,11 @@ def submit_application(
         raise HTTPException(422, {"errors": spec_errors})
 
     application = service.create_application(db, student, document_type, items, details_json=json.dumps(parsed_details))
+    # Assign checklist categories from filename hints while the uploads are still in memory and
+    # persist them (create_application's commit precedes this), so every later request/session —
+    # including the read-only GET checklist — sees the same deterministic classification.
+    document_checklist.assign_categories(application)
+    db.commit()
     return service.load_application(db, application.id, student.id)
 
 

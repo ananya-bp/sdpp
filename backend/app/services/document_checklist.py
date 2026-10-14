@@ -209,7 +209,16 @@ def guess_category(filename: str, text: str | None) -> str | None:
     return None
 
 
-def assign_categories(application: Application, student: Student | None = None) -> None:
+def assign_categories(db=None, application: Application | None = None,
+                      student: Student | None = None) -> None:
+    """Positional call ``assign_categories(application)`` (legacy) and keyword call
+    ``assign_categories(db=..., application=...)`` are both supported."""
+    if application is None and isinstance(db, Application):  # legacy positional usage
+        db, application = None, db
+    return _assign_categories(application)
+
+
+def _assign_categories(application: Application) -> None:
     """Give every uploaded row a checklist category for this application (per-request assignment).
 
     Deterministic priority, using ONLY data that actually exists:
@@ -230,30 +239,38 @@ def assign_categories(application: Application, student: Student | None = None) 
     # re-guessing from filename/OCR text could silently move a verified document to a different
     # checklist slot on every evaluation. A multi-slot item (e.g. semester grade cards) may be
     # satisfied by several documents, so it does not block other docs from the same category.
+    # Pass 1: reviewer decisions and persisted categories always win over hints.
+    # document_category is a PERSISTED column (revision 20261014_562d5a8aebea), so the value
+    # loaded from the database is authoritative across requests/sessions — no private-attribute
+    # lookups. A reviewer marker overrides a stale stored category; otherwise any existing
+    # stored category is KEPT (re-guessing could silently move a verified or already-classified
+    # document to another checklist slot on every evaluation). Only rows with no category at all
+    # fall through to the deterministic hint chain below.
     for doc in application.documents:
-        # document_category is a PERSISTED column (revision 20261014_562d5a8aebea), so the value
-        # loaded from the database is authoritative across requests/sessions — no private-attribute
-        # lookups. A verified row keeps its stored category; re-guessing could move it to another
-        # checklist slot on every evaluation.
+        stored = getattr(doc, "document_category", None) or "UNASSIGNED"
         reviewer_cat = read_review_category(doc)
-        if reviewer_cat is None and getattr(doc, "validation_status", None) == ApplicationStatus.VERIFIED.value:
-            stored = getattr(doc, "document_category", None)
-            reviewer_cat = stored if stored and stored != "UNASSIGNED" else None
-        if reviewer_cat and reviewer_cat in valid:
-            doc.document_category = reviewer_cat
-            reviewer_assigned.add(reviewer_cat)
+        if reviewer_cat:
+            doc.document_category = reviewer_cat if reviewer_cat in valid else "UNASSIGNED"
+            if reviewer_cat in valid:
+                reviewer_assigned.add(reviewer_cat)
             continue
-        if reviewer_cat and reviewer_cat not in valid:
-            doc.document_category = "UNASSIGNED"  # stale decision for this type -> needs review
+        if stored != "UNASSIGNED" and stored in valid:
+            doc.document_category = stored
+            reviewer_assigned.add(stored)
             continue
-        # Pass 2 (per doc): deterministic hint chain — filename first, OCR text second. A hint
-        # that collides with an already-claimed single-slot item is dropped rather than stealing
-        # its slot; multi-slot items (grade cards) tolerate several documents. `assigned` is the
-        # running set of claimed slots so two hinted docs cannot both take one single-slot item.
+        if stored != "UNASSIGNED" and stored not in valid:
+            doc.document_category = "UNASSIGNED"  # stale category for this type -> needs review
+            continue
+        # Pass 2 (per unclassified doc): deterministic hint chain — filename first, OCR text
+        # second. A hint that collides with an already-claimed single-slot item is dropped
+        # rather than stealing its slot; multi-slot items (grade cards) tolerate several
+        # documents. `assigned` is the running set of claimed slots so two hinted docs cannot
+        # both take one single-slot item.
         assigned = set(reviewer_assigned)
         for d in application.documents:
-            if getattr(d, "document_category", None) and d.document_category != "UNASSIGNED":
-                assigned.add(d.document_category)
+            c = getattr(d, "document_category", None)
+            if c and c != "UNASSIGNED" and d is not doc:
+                assigned.add(c)
         cat = guess_category(doc.original_filename or "", "")
         if cat in assigned:
             item = _find_item(code, cat)
@@ -280,6 +297,12 @@ def record_review_category(db: Session, doc: UploadedDocument, category: str | N
     if category:
         reason = f"{reason} {_REVIEW_CAT_PREFIX}{category}".strip()
     doc.validation_reason = reason or None
+
+
+def apply_category(db: Session, doc: UploadedDocument, category: str | None) -> None:
+    """Persist an explicitly confirmed checklist category on a document row."""
+    doc.document_category = category or "UNASSIGNED"
+    db.commit()
 
 
 def read_review_category(doc: UploadedDocument) -> str | None:
@@ -439,7 +462,15 @@ def evaluate_checklist(db: Session, application: Application, student: Student, 
     Re-running is cheap and idempotent; replaced documents re-enter verification automatically
     because replacement resets their status to SUBMITTED.
     """
+    before = {id(doc): getattr(doc, "document_category", None) for doc in application.documents}
     assign_categories(application)
+    # Persist the per-application category assignments so they survive across requests/sessions
+    # (the hybrid `extension` attribute is intentionally never written to this column).
+    if db is not None and any(
+        id(doc) in before and getattr(doc, "document_category", None) != before[id(doc)]
+        for doc in application.documents
+    ):
+        db.commit()
     changed = False
     computed: dict[int, str] = {}
     for doc in application.documents:
