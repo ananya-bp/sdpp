@@ -1,0 +1,473 @@
+{
+  "params": {
+    "n_estimators": 200,
+    "max_samples": 1024,
+    "contamination": "auto",
+    "random_state": 42,
+    "n_jobs": 1
+  },
+  "features": [
+    "amount_deviation",
+    "attempt_index",
+    "failed_attempts_before",
+    "seconds_since_prev_attempt",
+    "student_txns_prior_24h",
+    "student_other_apps_24h",
+    "student_other_apps_7d",
+    "same_doc_other_apps_7d",
+    "same_doc_other_paid_apps_7d",
+    "ps_FAILED",
+    "ps_PENDING",
+    "ps_SUCCESS"
+  ],
+  "excluded": {
+    "label_is_anomaly": "evaluation label - never a feature",
+    "label_anomaly_type": "evaluation label - never a feature",
+    "split": "split label",
+    "transaction_id": "identifier",
+    "application_id": "identifier",
+    "student_id": "identifier",
+    "transacted_at": "raw timestamp (used only for the chronological split)",
+    "document_type": "only sets the fee; the anomaly signal is captured by amount_ratio",
+    "amount": "redundant with amount_ratio (and depends on document type)",
+    "expected_amount": "redundant with amount_ratio",
+    "amount_ratio": "not used raw: fed to the model as amount_deviation = |amount_ratio - 1|",
+    "minutes_since_submission": "no gain on validation (feature-set comparison)",
+    "hour": "no gain on validation (feature-set comparison)",
+    "dow": "no gain on validation (feature-set comparison)",
+    "payment_status": "replaced by its one-hot columns ps_*"
+  },
+  "threshold": {
+    "score_threshold": 0.670369,
+    "rule": "flag top 1.5% of train scores (chosen by best valid F1 of IF+rule)",
+    "valid_f1_by_q_pct": {
+      "1": 0.7231,
+      "1.5": 0.766,
+      "2": 0.7248,
+      "2.5": 0.7329,
+      "3": 0.6982,
+      "3.5": 0.6704,
+      "4": 0.6425,
+      "5": 0.6204,
+      "6": 0.4669,
+      "8": 0.4765,
+      "10": 0.408
+    }
+  },
+  "amount_rule_tolerance": 0.005,
+  "phase4_reference": {
+    "overall_rate": 0.0259,
+    "best_single_feature_auc": {
+      "AMOUNT_MISMATCH": 1.0,
+      "RAPID_RETRIES": 0.911,
+      "DUPLICATE_REQUEST": 0.975,
+      "FREQUENCY_BURST": 0.932
+    }
+  },
+  "train": {
+    "isolation_forest_only": {
+      "overall": {
+        "n": 9542,
+        "anomalies": 232,
+        "flagged": 144,
+        "tp": 79,
+        "fp": 65,
+        "fn": 153,
+        "tn": 9245,
+        "precision": 0.5486,
+        "recall": 0.3405,
+        "f1": 0.4202,
+        "roc_auc": 0.9444,
+        "avg_precision": 0.4627,
+        "flag_rate": 0.0151
+      },
+      "by_type": {
+        "AMOUNT_MISMATCH": {
+          "injected": 63,
+          "detected": 1,
+          "missed": 62,
+          "recall": 0.0159
+        },
+        "DUPLICATE_REQUEST": {
+          "injected": 33,
+          "detected": 3,
+          "missed": 30,
+          "recall": 0.0909
+        },
+        "FREQUENCY_BURST": {
+          "injected": 40,
+          "detected": 24,
+          "missed": 16,
+          "recall": 0.6
+        },
+        "RAPID_RETRIES": {
+          "injected": 96,
+          "detected": 51,
+          "missed": 45,
+          "recall": 0.5312
+        },
+        "RAPID_RETRIES_breakdown": {
+          "first_attempt (attempt_index=1)": {
+            "injected": 16,
+            "detected": 1,
+            "recall": 0.0625
+          },
+          "later_attempts (>1)": {
+            "injected": 80,
+            "detected": 50,
+            "recall": 0.625
+          }
+        },
+        "flagged_rows_by_true_type": {
+          "NONE": 65,
+          "RAPID_RETRIES": 51,
+          "FREQUENCY_BURST": 24,
+          "DUPLICATE_REQUEST": 3,
+          "AMOUNT_MISMATCH": 1
+        },
+        "false_positive_rate_normal_rows": {
+          "all_normal": 0.007,
+          "normal_first_attempts": 0.0053,
+          "normal_retries (benign look-alikes, attempt_index>1)": 0.0297
+        }
+      }
+    },
+    "if_plus_amount_rule": {
+      "overall": {
+        "n": 9542,
+        "anomalies": 232,
+        "flagged": 206,
+        "tp": 141,
+        "fp": 65,
+        "fn": 91,
+        "tn": 9245,
+        "precision": 0.6845,
+        "recall": 0.6078,
+        "f1": 0.6438,
+        "roc_auc": 0.9444,
+        "avg_precision": 0.4627,
+        "flag_rate": 0.0216
+      },
+      "by_type": {
+        "AMOUNT_MISMATCH": {
+          "injected": 63,
+          "detected": 63,
+          "missed": 0,
+          "recall": 1.0
+        },
+        "DUPLICATE_REQUEST": {
+          "injected": 33,
+          "detected": 3,
+          "missed": 30,
+          "recall": 0.0909
+        },
+        "FREQUENCY_BURST": {
+          "injected": 40,
+          "detected": 24,
+          "missed": 16,
+          "recall": 0.6
+        },
+        "RAPID_RETRIES": {
+          "injected": 96,
+          "detected": 51,
+          "missed": 45,
+          "recall": 0.5312
+        },
+        "RAPID_RETRIES_breakdown": {
+          "first_attempt (attempt_index=1)": {
+            "injected": 16,
+            "detected": 1,
+            "recall": 0.0625
+          },
+          "later_attempts (>1)": {
+            "injected": 80,
+            "detected": 50,
+            "recall": 0.625
+          }
+        },
+        "flagged_rows_by_true_type": {
+          "NONE": 65,
+          "AMOUNT_MISMATCH": 63,
+          "RAPID_RETRIES": 51,
+          "FREQUENCY_BURST": 24,
+          "DUPLICATE_REQUEST": 3
+        },
+        "false_positive_rate_normal_rows": {
+          "all_normal": 0.007,
+          "normal_first_attempts": 0.0053,
+          "normal_retries (benign look-alikes, attempt_index>1)": 0.0297
+        }
+      }
+    }
+  },
+  "valid": {
+    "isolation_forest_only": {
+      "overall": {
+        "n": 2378,
+        "anomalies": 80,
+        "flagged": 46,
+        "tp": 39,
+        "fp": 7,
+        "fn": 41,
+        "tn": 2291,
+        "precision": 0.8478,
+        "recall": 0.4875,
+        "f1": 0.619,
+        "roc_auc": 0.947,
+        "avg_precision": 0.6692,
+        "flag_rate": 0.0193
+      },
+      "by_type": {
+        "AMOUNT_MISMATCH": {
+          "injected": 15,
+          "detected": 0,
+          "missed": 15,
+          "recall": 0.0
+        },
+        "DUPLICATE_REQUEST": {
+          "injected": 9,
+          "detected": 4,
+          "missed": 5,
+          "recall": 0.4444
+        },
+        "FREQUENCY_BURST": {
+          "injected": 25,
+          "detected": 19,
+          "missed": 6,
+          "recall": 0.76
+        },
+        "RAPID_RETRIES": {
+          "injected": 31,
+          "detected": 16,
+          "missed": 15,
+          "recall": 0.5161
+        },
+        "RAPID_RETRIES_breakdown": {
+          "first_attempt (attempt_index=1)": {
+            "injected": 5,
+            "detected": 0,
+            "recall": 0.0
+          },
+          "later_attempts (>1)": {
+            "injected": 26,
+            "detected": 16,
+            "recall": 0.6154
+          }
+        },
+        "flagged_rows_by_true_type": {
+          "FREQUENCY_BURST": 19,
+          "RAPID_RETRIES": 16,
+          "NONE": 7,
+          "DUPLICATE_REQUEST": 4
+        },
+        "false_positive_rate_normal_rows": {
+          "all_normal": 0.003,
+          "normal_first_attempts": 0.0033,
+          "normal_retries (benign look-alikes, attempt_index>1)": 0.0
+        }
+      }
+    },
+    "if_plus_amount_rule": {
+      "overall": {
+        "n": 2378,
+        "anomalies": 80,
+        "flagged": 61,
+        "tp": 54,
+        "fp": 7,
+        "fn": 26,
+        "tn": 2291,
+        "precision": 0.8852,
+        "recall": 0.675,
+        "f1": 0.766,
+        "roc_auc": 0.947,
+        "avg_precision": 0.6692,
+        "flag_rate": 0.0257
+      },
+      "by_type": {
+        "AMOUNT_MISMATCH": {
+          "injected": 15,
+          "detected": 15,
+          "missed": 0,
+          "recall": 1.0
+        },
+        "DUPLICATE_REQUEST": {
+          "injected": 9,
+          "detected": 4,
+          "missed": 5,
+          "recall": 0.4444
+        },
+        "FREQUENCY_BURST": {
+          "injected": 25,
+          "detected": 19,
+          "missed": 6,
+          "recall": 0.76
+        },
+        "RAPID_RETRIES": {
+          "injected": 31,
+          "detected": 16,
+          "missed": 15,
+          "recall": 0.5161
+        },
+        "RAPID_RETRIES_breakdown": {
+          "first_attempt (attempt_index=1)": {
+            "injected": 5,
+            "detected": 0,
+            "recall": 0.0
+          },
+          "later_attempts (>1)": {
+            "injected": 26,
+            "detected": 16,
+            "recall": 0.6154
+          }
+        },
+        "flagged_rows_by_true_type": {
+          "FREQUENCY_BURST": 19,
+          "RAPID_RETRIES": 16,
+          "AMOUNT_MISMATCH": 15,
+          "NONE": 7,
+          "DUPLICATE_REQUEST": 4
+        },
+        "false_positive_rate_normal_rows": {
+          "all_normal": 0.003,
+          "normal_first_attempts": 0.0033,
+          "normal_retries (benign look-alikes, attempt_index>1)": 0.0
+        }
+      }
+    }
+  },
+  "test": {
+    "isolation_forest_only": {
+      "overall": {
+        "n": 2967,
+        "anomalies": 74,
+        "flagged": 59,
+        "tp": 27,
+        "fp": 32,
+        "fn": 47,
+        "tn": 2861,
+        "precision": 0.4576,
+        "recall": 0.3649,
+        "f1": 0.406,
+        "roc_auc": 0.946,
+        "avg_precision": 0.4707,
+        "flag_rate": 0.0199
+      },
+      "by_type": {
+        "AMOUNT_MISMATCH": {
+          "injected": 23,
+          "detected": 0,
+          "missed": 23,
+          "recall": 0.0
+        },
+        "DUPLICATE_REQUEST": {
+          "injected": 8,
+          "detected": 1,
+          "missed": 7,
+          "recall": 0.125
+        },
+        "FREQUENCY_BURST": {
+          "injected": 19,
+          "detected": 14,
+          "missed": 5,
+          "recall": 0.7368
+        },
+        "RAPID_RETRIES": {
+          "injected": 24,
+          "detected": 12,
+          "missed": 12,
+          "recall": 0.5
+        },
+        "RAPID_RETRIES_breakdown": {
+          "first_attempt (attempt_index=1)": {
+            "injected": 4,
+            "detected": 0,
+            "recall": 0.0
+          },
+          "later_attempts (>1)": {
+            "injected": 20,
+            "detected": 12,
+            "recall": 0.6
+          }
+        },
+        "flagged_rows_by_true_type": {
+          "NONE": 32,
+          "FREQUENCY_BURST": 14,
+          "RAPID_RETRIES": 12,
+          "DUPLICATE_REQUEST": 1
+        },
+        "false_positive_rate_normal_rows": {
+          "all_normal": 0.0111,
+          "normal_first_attempts": 0.0089,
+          "normal_retries (benign look-alikes, attempt_index>1)": 0.0417
+        }
+      }
+    },
+    "if_plus_amount_rule": {
+      "overall": {
+        "n": 2967,
+        "anomalies": 74,
+        "flagged": 82,
+        "tp": 50,
+        "fp": 32,
+        "fn": 24,
+        "tn": 2861,
+        "precision": 0.6098,
+        "recall": 0.6757,
+        "f1": 0.641,
+        "roc_auc": 0.946,
+        "avg_precision": 0.4707,
+        "flag_rate": 0.0276
+      },
+      "by_type": {
+        "AMOUNT_MISMATCH": {
+          "injected": 23,
+          "detected": 23,
+          "missed": 0,
+          "recall": 1.0
+        },
+        "DUPLICATE_REQUEST": {
+          "injected": 8,
+          "detected": 1,
+          "missed": 7,
+          "recall": 0.125
+        },
+        "FREQUENCY_BURST": {
+          "injected": 19,
+          "detected": 14,
+          "missed": 5,
+          "recall": 0.7368
+        },
+        "RAPID_RETRIES": {
+          "injected": 24,
+          "detected": 12,
+          "missed": 12,
+          "recall": 0.5
+        },
+        "RAPID_RETRIES_breakdown": {
+          "first_attempt (attempt_index=1)": {
+            "injected": 4,
+            "detected": 0,
+            "recall": 0.0
+          },
+          "later_attempts (>1)": {
+            "injected": 20,
+            "detected": 12,
+            "recall": 0.6
+          }
+        },
+        "flagged_rows_by_true_type": {
+          "NONE": 32,
+          "AMOUNT_MISMATCH": 23,
+          "FREQUENCY_BURST": 14,
+          "RAPID_RETRIES": 12,
+          "DUPLICATE_REQUEST": 1
+        },
+        "false_positive_rate_normal_rows": {
+          "all_normal": 0.0111,
+          "normal_first_attempts": 0.0089,
+          "normal_retries (benign look-alikes, attempt_index>1)": 0.0417
+        }
+      }
+    }
+  }
+}

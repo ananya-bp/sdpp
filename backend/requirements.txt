@@ -1,0 +1,30 @@
+# Backend dependencies (versions pinned to the versions tested in each phase)
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+SQLAlchemy==2.0.54
+alembic==1.20.0
+psycopg[binary]==3.3.6
+pydantic-settings==2.15.0
+
+# Auth, uploads, validation (Phase 2)
+PyJWT==2.14.0
+argon2-cffi==25.1.0
+python-multipart==0.0.32
+email-validator==2.3.0
+
+# OCR (Phase 3) - needs the system binaries `tesseract-ocr` and `poppler-utils` installed too
+pytesseract==0.3.13
+pdf2image==1.17.0
+
+# Testing
+pytest==9.1.1
+httpx==0.28.1
+
+# Phase 5 ML runtime (the /api/forecast, /api/risk, /api/anomaly endpoints load the saved models from ml/models/).
+# Same pins as ml/requirements.txt. Artifacts are scikit-learn/LightGBM pickles: keep these versions identical between
+# training and serving, or re-run `python -m ml.forecasting`, `python -m ml.risk_scoring`, `python -m ml.anomaly`.
+numpy==2.5.3
+pandas==3.0.6
+scikit-learn==1.9.1
+lightgbm==4.7.0
+joblib==1.5.3

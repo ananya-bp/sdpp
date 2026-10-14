@@ -1,0 +1,11 @@
+# Phase 4 data pipeline (versions pinned to what this phase was tested with).
+# Install into its own venv, or into the backend venv (Phase 5 will need these there anyway).
+numpy==2.5.3
+pandas==3.0.6
+scikit-learn==1.9.1     # validate_datasets.py + Phase 5.2 risk model (see PHASE_5_2_STATUS.md: artifact trained on 1.8.0)
+pytest==9.1.1
+matplotlib==3.11.2      # only used by make_figures.py (optional)
+
+# Phase 5.1 forecasting (tested with the versions installed in this session)
+lightgbm==4.7.0
+joblib==1.5.3

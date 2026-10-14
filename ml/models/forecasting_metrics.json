@@ -1,0 +1,116 @@
+{
+  "baselines": {
+    "demand": {
+      "note": "test-split MAE of daily applications per document type; floors for Phase 5A to beat",
+      "train_mean_mae": 2.547,
+      "seasonal_naive_lag7_mae": 2.554,
+      "mean_daily_applications_per_type": 3.762
+    },
+    "tat": {
+      "note": "test-split MAE in hours; floor for Phase 5A to beat",
+      "train_median_mae_hours": 34.79
+    }
+  },
+  "demand": {
+    "chosen_params": {
+      "objective": "poisson",
+      "learning_rate": 0.03,
+      "num_leaves": 7,
+      "min_child_samples": 40,
+      "subsample": 0.8,
+      "subsample_freq": 1,
+      "colsample_bytree": 0.8
+    },
+    "best_iteration": 377,
+    "grid_valid_mae": [
+      1.554,
+      1.534,
+      1.556,
+      1.541
+    ],
+    "train": {
+      "n": 2812,
+      "mae": 1.551,
+      "rmse": 2.072,
+      "target_min": 0.0,
+      "target_max": 19.0,
+      "pred_min": 0.6,
+      "pred_max": 12.4
+    },
+    "valid": {
+      "n": 724,
+      "mae": 1.534,
+      "rmse": 2.047,
+      "target_min": 0.0,
+      "target_max": 20.0,
+      "pred_min": 0.66,
+      "pred_max": 12.4
+    },
+    "test": {
+      "n": 736,
+      "mae": 1.816,
+      "rmse": 2.425,
+      "target_min": 0.0,
+      "target_max": 22.0,
+      "pred_min": 0.74,
+      "pred_max": 11.29
+    },
+    "test_baselines_mae": {
+      "train_mean": 2.695,
+      "seasonal_naive_lag7": 2.554
+    },
+    "test_by_doc_type_mae": {
+      "DUPLICATE_GRADE_CARD": 1.763,
+      "MIGRATION_CERTIFICATE": 1.547,
+      "PROVISIONAL_DEGREE_CERTIFICATE": 1.585,
+      "TRANSCRIPT": 2.371
+    }
+  },
+  "tat": {
+    "chosen_params": {
+      "objective": "regression_l1",
+      "learning_rate": 0.03,
+      "num_leaves": 7,
+      "min_child_samples": 30,
+      "subsample": 0.8,
+      "subsample_freq": 1,
+      "colsample_bytree": 0.8
+    },
+    "best_iteration": 647,
+    "grid_valid_mae": [
+      14.562,
+      14.657,
+      14.593,
+      14.755
+    ],
+    "train": {
+      "n": 8139,
+      "mae": 10.447,
+      "rmse": 24.017,
+      "target_min": 0.52,
+      "target_max": 206.58,
+      "pred_min": 0.85,
+      "pred_max": 97.84
+    },
+    "valid": {
+      "n": 2019,
+      "mae": 14.562,
+      "rmse": 28.799,
+      "target_min": 0.52,
+      "target_max": 162.96,
+      "pred_min": 1.54,
+      "pred_max": 70.81
+    },
+    "test": {
+      "n": 2428,
+      "mae": 19.89,
+      "rmse": 34.146,
+      "target_min": 0.54,
+      "target_max": 173.7,
+      "pred_min": 0.94,
+      "pred_max": 87.94
+    },
+    "test_baseline_train_median_mae": 34.794,
+    "valid_baseline_train_median_mae": 23.554
+  }
+}

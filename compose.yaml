@@ -1,0 +1,67 @@
+# University Document Portal - complete stack (PostgreSQL + FastAPI backend + Next.js frontend).
+# Usage:  copy .env.example to .env (or run scripts/setup-env.ps1), then:  docker compose up --build
+name: sdp-portal
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sdp_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-sdp_portal}
+    volumes:
+      - pgdata:/var/lib/postgresql/data      # named volume: the database survives container recreation
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    # No host port is published on purpose: only the backend needs the database, and publishing 5432
+    # could clash with a PostgreSQL already installed on Windows.
+
+  backend:
+    build:
+      context: .                       # project root, so the image can include the top-level ml/ package
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy     # wait for a healthy database before migrating/serving
+    environment:
+      # Inside the Compose network the database host is the SERVICE NAME "db", not localhost.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-sdp_user}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-sdp_portal}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env (see .env.example)}
+      # The BROWSER calls the API, so CORS must allow the address the browser loads the frontend from.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-5}
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - uploads:/data/uploads          # named volume: uploaded documents survive container recreation
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/db', timeout=4)"]
+      interval: 10s
+      timeout: 6s
+      retries: 12
+      start_period: 40s                # first start runs migrations + seeding
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Compiled into the browser bundle: must be reachable FROM THE BROWSER (the host-published port).
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+
+volumes:
+  pgdata:
+  uploads:

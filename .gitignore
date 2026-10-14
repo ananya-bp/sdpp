@@ -1,0 +1,23 @@
+# Secrets / local config (never commit)
+.env
+.env.local
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Uploaded files (student documents) — never commit real uploads
+backend/uploads/

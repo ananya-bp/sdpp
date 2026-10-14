@@ -1,0 +1,187 @@
+{
+  "raw": {
+    "students": 3000,
+    "applications": 16543,
+    "transactions": 14887,
+    "status_counts": {
+      "VERIFIED": 12586,
+      "NOT_ELIGIBLE": 2782,
+      "PAYMENT_PENDING": 565,
+      "REJECTED": 518,
+      "UNDER_REVIEW": 91,
+      "ELIGIBLE": 1
+    },
+    "applications_by_document_type": {
+      "TRANSCRIPT": 6745,
+      "DUPLICATE_GRADE_CARD": 4037,
+      "PROVISIONAL_DEGREE_CERTIFICATE": 3155,
+      "MIGRATION_CERTIFICATE": 2606
+    },
+    "eligible_share": 0.8318,
+    "first_submission": "2023-09-01 00:55:53",
+    "last_submission": "2026-08-31 23:47:12"
+  },
+  "split_sizes": {
+    "forecast_daily": {
+      "train": 2812,
+      "valid": 724,
+      "test": 736
+    },
+    "tat_applications": {
+      "train": 8139,
+      "valid": 2019,
+      "test": 2428
+    },
+    "risk_scoring": {
+      "train": 8459,
+      "valid": 2097,
+      "test": 2548
+    },
+    "anomaly_transactions": {
+      "train": 9542,
+      "valid": 2378,
+      "test": 2967
+    }
+  },
+  "forecasting_sanity_baselines": {
+    "note": "test-split MAE of daily applications per document type; floors for Phase 5A to beat",
+    "train_mean_mae": 2.547,
+    "seasonal_naive_lag7_mae": 2.554,
+    "mean_daily_applications_per_type": 3.762
+  },
+  "forecast_days_with_censored_tat": 24,
+  "tat_hours_quantiles": {
+    "0.05": 3.3,
+    "0.25": 16.7,
+    "0.5": 24.2,
+    "0.75": 61.5,
+    "0.95": 98.3,
+    "0.99": 133.0
+  },
+  "tat_sanity_baseline": {
+    "note": "test-split MAE in hours; floor for Phase 5A to beat",
+    "train_median_mae_hours": 34.79
+  },
+  "tat_by_queue_quintile_median_hours": {
+    "(-0.001, 9.0]": 19.7,
+    "(9.0, 14.0]": 19.9,
+    "(14.0, 20.0]": 21.0,
+    "(20.0, 31.0]": 23.6,
+    "(31.0, 87.0]": 47.8
+  },
+  "risk_scoring": {
+    "rows": 13104,
+    "per_split": {
+      "train": {
+        "rows": 8459,
+        "positive_rate": 0.1789,
+        "oracle_auc": 0.8345
+      },
+      "valid": {
+        "rows": 2097,
+        "positive_rate": 0.2675,
+        "oracle_auc": 0.8383
+      },
+      "test": {
+        "rows": 2548,
+        "positive_rate": 0.2912,
+        "oracle_auc": 0.8518
+      }
+    },
+    "oracle_auc_note": "AUC of the TRUE generating probability: the ceiling any model can reach on this simulated label",
+    "single_feature_auc_train": {
+      "backlog_count": 0.545,
+      "cgpa": 0.443,
+      "past_fee_delays_12m": 0.6,
+      "prior_review_count_lagged": 0.696,
+      "ocr_cgpa_mismatch": 0.531,
+      "ocr_failed": 0.516,
+      "prior_apps_count": 0.698
+    },
+    "sanity_baseline_logreg_test_auc": 0.8152,
+    "sanity_baseline_note": "throwaway check that signal exists; NOT the Phase 5B model"
+  },
+  "anomaly_transactions": {
+    "rows": 14887,
+    "anomaly_rate": 0.0259,
+    "rows_by_type": {
+      "NONE": 14501,
+      "RAPID_RETRIES": 151,
+      "AMOUNT_MISMATCH": 101,
+      "FREQUENCY_BURST": 84,
+      "DUPLICATE_REQUEST": 50
+    },
+    "separability_best_single_feature": {
+      "AMOUNT_MISMATCH": {
+        "rows": 101,
+        "best_single_feature": "amount_ratio",
+        "auc": 1.0
+      },
+      "RAPID_RETRIES": {
+        "rows": 151,
+        "best_single_feature": "seconds_since_prev_attempt",
+        "auc": 0.911
+      },
+      "DUPLICATE_REQUEST": {
+        "rows": 50,
+        "best_single_feature": "same_doc_other_apps_7d",
+        "auc": 0.975
+      },
+      "FREQUENCY_BURST": {
+        "rows": 84,
+        "best_single_feature": "student_other_apps_24h",
+        "auc": 0.932
+      }
+    },
+    "rapid_retry_rows_that_are_first_attempts": 0.166,
+    "note": "first attempt of a retry burst looks like any normal first attempt at row level; a row-level detector cannot flag it (see docs/DATA_DICTIONARY.md)"
+  },
+  "hard_checks_failed": 0,
+  "generation": {
+    "seed": 20260928,
+    "n_students": 3000,
+    "start": "2023-09-01",
+    "snapshot_end": "2026-08-31",
+    "train_end": "2025-08-31",
+    "valid_end": "2026-02-28",
+    "data_origin": "SIMULATED - no real KLE Tech data. No public benchmark dataset is included."
+  },
+  "files": {
+    "labels/application_labels.csv": {
+      "rows": 16543,
+      "sha256": "fcec8f1058251d5b1efe4db82872a3dd2dc394a2f3b0c6a146cce35a338613f5"
+    },
+    "labels/transaction_labels.csv": {
+      "rows": 14887,
+      "sha256": "8b3bb2ed64e19fba410edda4f4a73ecec9eb067e4f7195c8d6698e043f01bf30"
+    },
+    "processed/anomaly_transactions.csv": {
+      "rows": 14887,
+      "sha256": "c426c16e82a384fb549840159b9d7fbf5040b281b39887c88ca9fb3b8350d6dd"
+    },
+    "processed/forecast_daily.csv": {
+      "rows": 4272,
+      "sha256": "dac99c1ceac93511388d7fd4d1114ffc82e459b93f98680a3dfae11e644283a6"
+    },
+    "processed/risk_scoring.csv": {
+      "rows": 13104,
+      "sha256": "75295e2e1b812d82bf2935af8009952b417b89544351b2da298078365b77b1f1"
+    },
+    "processed/tat_applications.csv": {
+      "rows": 12586,
+      "sha256": "99f206eb4ad38351332e6f3b64bc7136a7b4f7559d2281c10e16a8c051f8008a"
+    },
+    "raw/applications.csv": {
+      "rows": 16543,
+      "sha256": "e3cbe7fc1a736d8baf14506437e1b8672afe768b8299eaa92fad12adb70d759e"
+    },
+    "raw/students.csv": {
+      "rows": 3000,
+      "sha256": "20d074d2b0926434af865124a2653420e769535f0efe6391c7190a589a5cfeb9"
+    },
+    "raw/transactions.csv": {
+      "rows": 14887,
+      "sha256": "e9c431039ac46aedee5457882994801a5302a154db8e26eadedfd1ca9e9e3019"
+    }
+  }
+}

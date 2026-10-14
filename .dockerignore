@@ -1,0 +1,17 @@
+# Root build context (used by backend/Dockerfile). Keeps secrets, host-built artefacts and uploads OUT of images.
+.git
+.gitignore
+**/.env
+**/.env.*
+!**/.env.example
+**/node_modules
+**/.next
+**/.venv
+**/venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+backend/uploads
+frontend
+ml/data/figures
+*.zip

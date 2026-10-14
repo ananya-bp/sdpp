@@ -1,0 +1,241 @@
+{
+  "chosen": {
+    "log1p_counts": true,
+    "C": 1.0,
+    "valid_grid_auc": {
+      "log=False,C=0.01": 0.8038,
+      "log=False,C=0.1": 0.8046,
+      "log=False,C=1.0": 0.8047,
+      "log=False,C=10.0": 0.8047,
+      "log=True,C=0.01": 0.8079,
+      "log=True,C=0.1": 0.8088,
+      "log=True,C=1.0": 0.809,
+      "log=True,C=10.0": 0.809
+    },
+    "flag_threshold_from_valid_f1": 0.28
+  },
+  "features": [
+    "document_type",
+    "department",
+    "backlog_count",
+    "past_fee_delays_12m",
+    "prior_apps_count",
+    "prior_review_count_lagged",
+    "semester",
+    "is_alumni",
+    "cgpa",
+    "num_documents",
+    "ocr_failed",
+    "ocr_cgpa_found",
+    "ocr_cgpa_mismatch"
+  ],
+  "excluded": {
+    "label_needs_manual_review": "the label itself",
+    "application_id": "identifier",
+    "student_id": "identifier (would memorise students)",
+    "submitted_at": "raw timestamp / used only for the chronological split",
+    "split": "split label"
+  },
+  "oracle_auc": {
+    "train": 0.8345,
+    "valid": 0.8383,
+    "test": 0.8518
+  },
+  "phase4_throwaway_logreg_test_auc": 0.8152,
+  "train": {
+    "at_0.5": {
+      "n": 8459,
+      "positive_rate": 0.1789,
+      "mean_predicted_prob": 0.1788,
+      "accuracy": 0.847,
+      "precision": 0.6613,
+      "recall": 0.2968,
+      "f1": 0.4097,
+      "roc_auc": 0.7969,
+      "brier": 0.1144,
+      "pred_min": 0.0137,
+      "pred_max": 0.9743
+    },
+    "at_0.28": {
+      "n": 8459,
+      "positive_rate": 0.1789,
+      "mean_predicted_prob": 0.1788,
+      "accuracy": 0.8233,
+      "precision": 0.5058,
+      "recall": 0.5182,
+      "f1": 0.5119,
+      "roc_auc": 0.7969,
+      "brier": 0.1144,
+      "pred_min": 0.0137,
+      "pred_max": 0.9743
+    }
+  },
+  "valid": {
+    "at_0.5": {
+      "n": 2097,
+      "positive_rate": 0.2675,
+      "mean_predicted_prob": 0.2666,
+      "accuracy": 0.7969,
+      "precision": 0.6726,
+      "recall": 0.4688,
+      "f1": 0.5525,
+      "roc_auc": 0.809,
+      "brier": 0.1456,
+      "pred_min": 0.0159,
+      "pred_max": 0.9757
+    },
+    "at_0.28": {
+      "n": 2097,
+      "positive_rate": 0.2675,
+      "mean_predicted_prob": 0.2666,
+      "accuracy": 0.7492,
+      "precision": 0.5229,
+      "recall": 0.713,
+      "f1": 0.6033,
+      "roc_auc": 0.809,
+      "brier": 0.1456,
+      "pred_min": 0.0159,
+      "pred_max": 0.9757
+    }
+  },
+  "test": {
+    "at_0.5": {
+      "n": 2548,
+      "positive_rate": 0.2912,
+      "mean_predicted_prob": 0.2869,
+      "accuracy": 0.7889,
+      "precision": 0.6932,
+      "recall": 0.4933,
+      "f1": 0.5764,
+      "roc_auc": 0.8196,
+      "brier": 0.1479,
+      "pred_min": 0.0159,
+      "pred_max": 0.9884
+    },
+    "at_0.28": {
+      "n": 2548,
+      "positive_rate": 0.2912,
+      "mean_predicted_prob": 0.2869,
+      "accuracy": 0.7531,
+      "precision": 0.5581,
+      "recall": 0.7318,
+      "f1": 0.6332,
+      "roc_auc": 0.8196,
+      "brier": 0.1479,
+      "pred_min": 0.0159,
+      "pred_max": 0.9884
+    },
+    "majority_class_accuracy": 0.7088
+  },
+  "test_auc_below_oracle": true,
+  "coefficients": [
+    {
+      "feature": "prior_review_count_lagged",
+      "coefficient": 0.6207,
+      "odds_ratio": 1.86,
+      "direction": "raises review probability"
+    },
+    {
+      "feature": "past_fee_delays_12m",
+      "coefficient": 0.4219,
+      "odds_ratio": 1.525,
+      "direction": "raises review probability"
+    },
+    {
+      "feature": "backlog_count",
+      "coefficient": 0.3207,
+      "odds_ratio": 1.378,
+      "direction": "raises review probability"
+    },
+    {
+      "feature": "prior_apps_count",
+      "coefficient": 0.306,
+      "odds_ratio": 1.358,
+      "direction": "raises review probability"
+    },
+    {
+      "feature": "is_alumni",
+      "coefficient": 0.2895,
+      "odds_ratio": 1.336,
+      "direction": "raises review probability"
+    },
+    {
+      "feature": "ocr_cgpa_mismatch",
+      "coefficient": 0.2469,
+      "odds_ratio": 1.28,
+      "direction": "raises review probability"
+    },
+    {
+      "feature": "department_EEE",
+      "coefficient": -0.2358,
+      "odds_ratio": 0.79,
+      "direction": "lowers review probability"
+    },
+    {
+      "feature": "ocr_failed",
+      "coefficient": 0.1931,
+      "odds_ratio": 1.213,
+      "direction": "raises review probability"
+    },
+    {
+      "feature": "document_type_MIGRATION_CERTIFICATE",
+      "coefficient": 0.1875,
+      "odds_ratio": 1.206,
+      "direction": "raises review probability"
+    },
+    {
+      "feature": "document_type_TRANSCRIPT",
+      "coefficient": -0.1541,
+      "odds_ratio": 0.857,
+      "direction": "lowers review probability"
+    },
+    {
+      "feature": "cgpa",
+      "coefficient": -0.1273,
+      "odds_ratio": 0.88,
+      "direction": "lowers review probability"
+    },
+    {
+      "feature": "department_MEC",
+      "coefficient": -0.0557,
+      "odds_ratio": 0.946,
+      "direction": "lowers review probability"
+    },
+    {
+      "feature": "document_type_PROVISIONAL_DEGREE_CERTIFICATE",
+      "coefficient": 0.0535,
+      "odds_ratio": 1.055,
+      "direction": "raises review probability"
+    },
+    {
+      "feature": "semester",
+      "coefficient": -0.0519,
+      "odds_ratio": 0.949,
+      "direction": "lowers review probability"
+    },
+    {
+      "feature": "ocr_cgpa_found",
+      "coefficient": 0.0355,
+      "odds_ratio": 1.036,
+      "direction": "raises review probability"
+    },
+    {
+      "feature": "department_CSE",
+      "coefficient": 0.0312,
+      "odds_ratio": 1.032,
+      "direction": "raises review probability"
+    },
+    {
+      "feature": "department_ECE",
+      "coefficient": -0.014,
+      "odds_ratio": 0.986,
+      "direction": "lowers review probability"
+    },
+    {
+      "feature": "num_documents",
+      "coefficient": -0.0114,
+      "odds_ratio": 0.989,
+      "direction": "lowers review probability"
+    }
+  ]
+}
