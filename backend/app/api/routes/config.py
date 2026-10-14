@@ -36,8 +36,26 @@ def get_upload_limits():
 @router.get("/forms")
 def get_form_specs():
     """Request-specific fields and supporting-document checklists for the four request types.
-
     Every spec carries verified=false until confirmed against official KLE Tech policy; the UI
     must label these requirements as unverified.
     """
     return request_specs.forms_payload()
+
+
+@router.get("/checklists")
+def get_checklists():
+    """Document-based eligibility checklists for the four application types (live policy).
+
+    Conditional ("if required by the university") items are shown with their CURRENT configured
+    requirement state — read live from settings, so a toggled policy flag is reflected without
+    code changes. Items remain labelled UNVERIFIED until confirmed against official policy.
+    """
+    from app.services import document_checklist
+
+    codes = [
+        "TRANSCRIPT",
+        "MIGRATION_CERTIFICATE",
+        "DUPLICATE_GRADE_CARD",
+        "PROVISIONAL_DEGREE_CERTIFICATE",
+    ]
+    return {"checklists": [document_checklist.checklist_payload(c) for c in codes]}

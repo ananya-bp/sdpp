@@ -2,7 +2,7 @@ from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
@@ -25,3 +25,7 @@ class OcrResult(Base):
     extracted_fields: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Back-reference so deleting an UploadedDocument cascades cleanly through the ORM too
+    # (the DB-level ON DELETE CASCADE already protects the table itself).
+    uploaded_document: Mapped["UploadedDocument"] = relationship(back_populates="ocr_result")  # noqa: F821

@@ -24,6 +24,9 @@ class Application(Base):
     )
     # Status vocabulary is finalised in Phase 2; the initial value is always 'SUBMITTED'.
     status: Mapped[str] = mapped_column(String(30), default="SUBMITTED", server_default="SUBMITTED", index=True)
+    # Request-specific form details (JSON object string; see services/request_specs.py).
+    # Stored as plain Text so no schema type/migration semantics change was needed for it.
+    details_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
