@@ -25,30 +25,58 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-def upgrade() -> None:
-    with op.batch_alter_table('applications') as batch_op:
-        batch_op.add_column(sa.Column('details_json', sa.Text(), nullable=True))
+def _has_col(inspector, table, column):
+    return any(c["name"] == column for c in inspector.get_columns(table))
 
-    with op.batch_alter_table('uploaded_documents') as batch_op:
-        batch_op.add_column(sa.Column('document_category', sa.String(length=50), nullable=True))
-        batch_op.add_column(sa.Column('validation_status', sa.String(length=30), nullable=True))
-        batch_op.add_column(sa.Column('validation_reason', sa.Text(), nullable=True))
-        batch_op.add_column(sa.Column('reviewed_by', sa.Integer(), nullable=True))
-        batch_op.add_column(sa.Column('reviewed_at', sa.DateTime(timezone=True), nullable=True))
-        batch_op.add_column(sa.Column('verified_at', sa.DateTime(timezone=True), nullable=True))
-        batch_op.add_column(sa.Column('version', sa.Integer(), nullable=False, server_default='1'))
-        batch_op.add_column(sa.Column('replaces_document_id', sa.Integer(), nullable=True))
-        batch_op.create_foreign_key(
-            'fk_uploaded_documents_reviewed_by_users',
-            'users', ['reviewed_by'], ['id'], ondelete='SET NULL',
-        )
-        batch_op.create_foreign_key(
-            'fk_uploaded_documents_replaces_document_id_uploaded_documents',
-            'uploaded_documents', ['replaces_document_id'], ['id'], ondelete='SET NULL',
-        )
-        batch_op.create_index(
-            'ix_uploaded_documents_replaces_document_id', ['replaces_document_id'], unique=False,
-        )
+
+def upgrade() -> None:
+    # Idempotent guards: some databases received parts of this revision through an earlier
+    # manual/hotfix application. Re-running `alembic upgrade head` must not fail on columns
+    # that already exist (and must add any that are missing). Additive-only either way.
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+
+    if not _has_col(inspector, 'applications', 'details_json'):
+        with op.batch_alter_table('applications') as batch_op:
+            batch_op.add_column(sa.Column('details_json', sa.Text(), nullable=True))
+
+    doc_cols = {c["name"] for c in inspector.get_columns('uploaded_documents')}
+    new_cols = [
+        ('document_category', sa.String(length=50), True, None),
+        ('validation_status', sa.String(length=30), True, None),
+        ('validation_reason', sa.Text(), True, None),
+        ('reviewed_by', sa.Integer(), True, None),
+        ('reviewed_at', sa.DateTime(timezone=True), True, None),
+        ('verified_at', sa.DateTime(timezone=True), True, None),
+        ('version', sa.Integer(), False, '1'),
+        ('replaces_document_id', sa.Integer(), True, None),
+    ]
+    missing = [(n, t, nul, dflt) for (n, t, nul, dflt) in new_cols if n not in doc_cols]
+    if missing:
+        with op.batch_alter_table('uploaded_documents') as batch_op:
+            for name, coltype, nullable, server_default in missing:
+                batch_op.add_column(sa.Column(name, coltype, nullable=nullable,
+                                              server_default=server_default))
+    if 'reviewed_by' not in doc_cols:
+        with op.batch_alter_table('uploaded_documents') as batch_op:
+            batch_op.create_foreign_key(
+                'fk_uploaded_documents_reviewed_by_users',
+                'users', ['reviewed_by'], ['id'], ondelete='SET NULL',
+            )
+    if 'replaces_document_id' not in doc_cols:
+        with op.batch_alter_table('uploaded_documents') as batch_op:
+            batch_op.create_foreign_key(
+                'fk_uploaded_documents_replaces_document_id_uploaded_documents',
+                'uploaded_documents', ['replaces_document_id'], ['id'], ondelete='SET NULL',
+            )
+            batch_op.create_index(
+                'ix_uploaded_documents_replaces_document_id', ['replaces_document_id'], unique=False,
+            )
+    if 'document_category' not in doc_cols:
+        with op.batch_alter_table('uploaded_documents') as batch_op:
+            batch_op.create_index(
+                'ix_uploaded_documents_document_category', ['document_category'], unique=False,
+            )
 
 
 def downgrade() -> None:
