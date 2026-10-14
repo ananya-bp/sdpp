@@ -202,37 +202,49 @@ def guess_category(filename: str, text: str | None) -> str | None:
 
 
 def assign_categories(application: Application, student: Student | None = None) -> None:
-    """Ensure every uploaded row has a checklist category for this application (in-request only).
+    """Give every uploaded row a checklist category for this application (per-request assignment).
 
-    Priority: reviewer decision (persisted review_category_id) > filename hint > OCR-text hint >
-    UNASSIGNED. Categories are held on the instance (non-persisted hybrid), so nothing is cached
-    across requests and no schema change was needed.
+    Deterministic priority, using ONLY data that actually exists:
+      1. an explicit reviewer category persisted in the document's validation_reason marker,
+      2. a filename hint (guess_category over the original filename),
+      3. an OCR-text hint when an OCR result exists,
+      4. otherwise UNASSIGNED — which routes the document to manual review instead of silently
+         classifying it.
+    Category assignment NEVER verifies a document; verification is a separate step
+    (verify_document / an explicit reviewer action). A reviewer decision always wins over hints,
+    so a corrected classification survives later OCR text changes.
     """
     code = application.document_type.code
-    used_reviewer = set()
+    valid = {item.category for item in get_checklist(code)}
+    reviewer_assigned: set[str] = set()
+    # Pass 1: reviewer decisions always win over hints. The persisted marker is authoritative;
+    # additionally, a row the pipeline already marked VERIFIED keeps its current category —
+    # re-guessing from filename/OCR text could silently move a verified document to a different
+    # checklist slot on every evaluation. A multi-slot item (e.g. semester grade cards) may be
+    # satisfied by several documents, so it does not block other docs from the same category.
     for doc in application.documents:
-        rcid = getattr(doc, "review_category_id", None)
-        if rcid is not None:
-            doc.document_category = _category_by_reviewer(code, rcid)
-            if doc.document_category:
-                used_reviewer.add(doc.document_category)
-    for doc in application.documents:
-        if getattr(doc, "document_category", None):
+        reviewer_cat = read_review_category(doc)
+        if reviewer_cat is None and getattr(doc, "validation_status", None) == ApplicationStatus.VERIFIED.value:
+            stored = doc.__dict__.get("_document_category")
+            reviewer_cat = stored if stored and stored != "UNASSIGNED" else None
+        if reviewer_cat and reviewer_cat in valid:
+            doc.document_category = reviewer_cat
+            reviewer_assigned.add(reviewer_cat)
             continue
-        cat = guess_category(doc.original_filename, None)
-        if cat is None or cat in used_reviewer and not doc.ocr_result:
-            # filename hint may collide with a reviewer-assigned single-slot item; still keep it,
-            # multi-slot items tolerate several docs anyway.
-            pass
+        if reviewer_cat and reviewer_cat not in valid:
+            doc.document_category = "UNASSIGNED"  # stale decision for this type -> needs review
+            continue
+        # Pass 2 (per doc): deterministic hint chain — filename first, OCR text second. A hint
+        # that collides with a reviewer-assigned single-slot item is dropped rather than stealing
+        # its slot; multi-slot items (grade cards) tolerate several documents.
+        cat = guess_category(doc.original_filename or "", "")
+        if cat in reviewer_assigned:
+            item = _find_item(code, cat)
+            if item is not None and not getattr(item, "multi", False):
+                cat = None
         if cat is None and doc.ocr_result is not None:
             cat = guess_category("", doc.ocr_result.raw_text)
-        doc.document_category = cat or "UNASSIGNED"
-
-
-def _category_by_reviewer(code: str, document_id: int) -> str | None:
-    for d in _load_review_overrides(code):  # placeholder-free lookup below
-        pass
-    return None
+        doc.document_category = cat if (cat and cat in valid) else "UNASSIGNED"
 
 
 # Reviewer decisions are persisted as status + reason on the document row itself; the category
@@ -358,9 +370,26 @@ _STATUS_LABELS = {
 }
 
 
-def _effective_status(doc: UploadedDocument, student: Student | None = None) -> str:
-    """Validation status of one stored document, honouring legacy rows."""
+def _effective_status(
+    doc: UploadedDocument,
+    student: Student | None = None,
+    override: str | None = None,
+) -> str:
+    """Validation status of one stored document, honouring legacy rows.
+
+    `override` is the freshly computed automated status for this evaluation pass. An explicit
+    reviewer VERIFIED decision (reviewed_by set) is authoritative and never downgraded by a
+    later hint-based reclassification; automated statuses, by contrast, may replace the stored
+    value (e.g. after replacement resets a document, or when OCR newly fails).
+    """
     st = getattr(doc, "validation_status", None) or ApplicationStatus.SUBMITTED.value
+    if override is not None:
+        reviewer_verified = (
+            st == ApplicationStatus.VERIFIED.value
+            and getattr(doc, "reviewed_by", None) is not None
+        )
+        if not reviewer_verified:
+            st = override
     category = getattr(doc, "document_category", None)
     if st == ApplicationStatus.VERIFIED.value and category == "DEGREE_COMPLETION_PROOF":
         # Authoritative completion check: an uploaded document alone must not establish it.
@@ -389,10 +418,12 @@ def evaluate_checklist(db: Session, application: Application, student: Student, 
     Re-running is cheap and idempotent; replaced documents re-enter verification automatically
     because replacement resets their status to SUBMITTED.
     """
-    assign_categories(db, application)
+    assign_categories(application)
     changed = False
+    computed: dict[int, str] = {}
     for doc in application.documents:
         new_status, reason = verify_document(application, doc, student)
+        computed[doc.id] = new_status
         if getattr(doc, "validation_status", None) != new_status:
             doc.validation_status = new_status
             changed = True
@@ -417,7 +448,7 @@ def evaluate_checklist(db: Session, application: Application, student: Student, 
     total_required = 0
     for item in get_checklist(application.document_type.code):
         matching = [d for d in docs if getattr(d, "document_category", None) == item.category]
-        statuses = [_effective_status(d, student) for d in matching]
+        statuses = [_effective_status(d, student, computed.get(d.id)) for d in matching]
         if item.category in _FORM_ONLY_CATEGORIES:
             reqs = _FORM_REQUIREMENTS.get(application.document_type.code, {}).get(item.category, [])
             ok = all(_detail_present(application, key, student) for key in reqs)
@@ -446,10 +477,10 @@ def evaluate_checklist(db: Session, application: Application, student: Student, 
             note = "Not uploaded yet." if item.required else "Optional — not uploaded."
         elif ApplicationStatus.REJECTED.value in statuses:
             status = ApplicationStatus.REJECTED.value
-            note = next((d.validation_reason for d in matching if _effective_status(d, student) == ApplicationStatus.REJECTED.value), "File rejected.")
+            note = next((d.validation_reason for d in matching if _effective_status(d, student, computed.get(d.id)) == ApplicationStatus.REJECTED.value), "File rejected.")
         elif ApplicationStatus.OCR_COMPLETED.value in statuses:
             status = ApplicationStatus.OCR_COMPLETED.value
-            note = next((d.validation_reason for d in matching if _effective_status(d, student) == ApplicationStatus.OCR_COMPLETED.value), "Awaiting verification.")
+            note = next((d.validation_reason for d in matching if _effective_status(d, student, computed.get(d.id)) == ApplicationStatus.OCR_COMPLETED.value), "Awaiting verification.")
         elif ApplicationStatus.SUBMITTED.value in statuses:
             status = ApplicationStatus.SUBMITTED.value
             note = "Uploaded. Run document processing to validate it."
@@ -465,8 +496,8 @@ def evaluate_checklist(db: Session, application: Application, student: Student, 
                     "id": d.id,
                     "filename": d.original_filename,
                     "uploaded_at": d.uploaded_at.isoformat() if d.uploaded_at else None,
-                    "status": _STATUS_LABELS[_effective_status(d, student)],
-                    "status_code": _effective_status(d, student),
+                    "status": _STATUS_LABELS[_effective_status(d, student, computed.get(d.id))],
+                    "status_code": _effective_status(d, student, computed.get(d.id)),
                     "reason": d.validation_reason,
                     "reviewed_by": d.reviewed_by,
                     "reviewed_at": d.reviewed_at.isoformat() if getattr(d, "reviewed_at", None) else None,
@@ -506,7 +537,8 @@ def _blocking_message(item: ChecklistItem, status_code: str | None) -> str:
 
 def _detail_present(application: Application, key: str, student: Student) -> bool:
     """Form-detail presence check. Delivery details fall back to the student's official profile
-    (name) so the check works even for applications created before the details form existed."""
+    (name/mobile/address/PIN columns where they exist) so the check works even for applications
+    created before the details form existed."""
     import json
 
     raw = getattr(application, "details_json", None) or "{}"
@@ -517,6 +549,9 @@ def _detail_present(application: Application, key: str, student: Student) -> boo
     value = str(details.get(key, "") or "").strip()
     if not value and key == "full_name":
         value = (student.full_name or "").strip()
-    if not value and key == "mobile":
-        value = str(getattr(student, "id", "") and "")  # no phone column exists; stays unsatisfied
+    if not value:
+        # Fall back to an official profile column of the same name, if the model has one.
+        profile_value = getattr(student, key, None)
+        if profile_value is not None and not callable(profile_value):
+            value = str(profile_value).strip()
     return bool(value)
