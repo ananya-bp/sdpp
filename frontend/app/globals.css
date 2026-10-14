@@ -1,73 +1,110 @@
+/* ---------- KLE Tech brand tokens (official palette) ---------- */
 :root {
-  --navy-900: #0f2147;
-  --navy-800: #162d5e;
-  --navy-700: #1d3b78;
-  --navy-100: #e3e9f5;
-  --navy-50: #f0f3fa;
-  --ink: #1b2437;
-  --muted: #5b6579;
-  --line: #d9dfeb;
-  --bg: #f4f6fa;
-  --white: #fff;
-  --success: #1d7a4b; --success-bg: #e6f4ec;
-  --danger: #b3261e;  --danger-bg: #fbe9e7;
-  --warning: #8a5a00; --warning-bg: #fdf3dc;
-  --info: #1d3b78;    --info-bg: #e3e9f5;
-  --radius: 8px;
-  --shadow: 0 1px 2px rgba(15, 33, 71, 0.06), 0 2px 8px rgba(15, 33, 71, 0.05);
+  --brand-primary: #C8102E;
+  --brand-primary-hover: #A50D26;
+  --brand-accent: #D7193F;
+
+  --background: #F5F6F8;
+  --surface: #FFFFFF;
+  --surface-muted: #F0F2F5;
+
+  --text-primary: #252A34;
+  --text-secondary: #697386;
+
+  --border: #E2E5E9;
+  --focus-ring: rgba(200, 16, 46, 0.22);
+
+  --success: #198754;
+  --warning: #D99A00;
+  --error: #C62828;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  --shadow-card: 0 2px 12px rgba(30, 35, 45, 0.06);
+}
+
+/* Legacy token names retained as aliases mapped to the KLE palette, so every
+   existing component rule (cards, buttons, pills, tables, forms) picks up the
+   new branding without per-page duplication. Values are visual-only. */
+:root {
+  --navy-900: var(--text-primary);   /* headings / primary text */
+  --navy-800: var(--brand-primary);  /* primary buttons */
+  --navy-700: var(--brand-primary);  /* accents, links, selected states */
+  --navy-100: #FBE7EB;               /* pale red tint: hovers, tracks, selected rows */
+  --navy-50:  var(--surface-muted);  /* muted surfaces */
+  --ink: var(--text-primary);
+  --muted: var(--text-secondary);
+  --line: var(--border);
+  --bg: var(--background);
+  --white: var(--surface);
+  --success-bg: #E6F4EE;
+  --danger: var(--error);
+  --danger-bg: #FBEAEA;
+  --warning-bg: #FCF3DF;
+  --info: var(--brand-primary);
+  --info-bg: #FBE7EB;
+  --radius: var(--radius-md);
+  --shadow: var(--shadow-card);
   --serif: Georgia, "Times New Roman", serif;
   --sans: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 /* ---------- KLE Tech student-facing theme (scoped) ----------
-   Applied ONLY under .kle-theme wrappers on student pages (see app/kle-theme.jsx).
-   Every selector below is prefixed with .kle-theme, so admin pages and shared
-   components are unaffected unless they opt in. Colors are derived from the
-   official logo's red branding + dark typography over neutral backgrounds. */
+   Applied ONLY under .kle-theme wrappers on student pages. The entire Next.js
+   app tree is student-facing (no admin UI lives here), but these overrides stay
+   scoped so nothing leaks into shared/global behaviour. Colours come directly
+   from the official KLE palette above. */
 .kle-theme {
-  --kle-red: #a2181c;
-  --kle-red-dark: #7e1215;
-  --kle-red-ink: #5f0d10;
-  --kle-red-tint: #fbf1f1;
-  --kle-red-line: #e6c9ca;
-  --kle-ink: #231c1d;
-  --kle-muted: #6b5f60;
-  --kle-bg: #faf7f6;
-  --kle-card: #ffffff;
-  --kle-line: #e6dedd;
+  --kle-red: var(--brand-primary);        /* #C8102E */
+  --kle-red-dark: var(--brand-primary-hover); /* #A50D26 */
+  --kle-red-ink: var(--text-primary);     /* dark charcoal typography */
+  --kle-red-tint: #FBE7EB;                /* pale red highlight */
+  --kle-red-line: #F2BCC4;
+  --kle-ink: var(--text-primary);
+  --kle-muted: var(--text-secondary);
+  --kle-bg: var(--background);
+  --kle-card: var(--surface);
+  --kle-line: var(--border);
 }
 .kle-theme, .kle-theme a { color: var(--kle-ink); }
 .kle-theme h1, .kle-theme h2, .kle-theme h3 { color: var(--kle-red-ink); }
 .kle-theme.muted, .kle-theme .muted { color: var(--kle-muted); }
-.kle-theme .card { background: var(--kle-card); border: 1px solid var(--kle-line); box-shadow: 0 1px 3px rgba(95, 13, 16, 0.06); }
+.kle-theme .card { background: var(--kle-card); border: 1px solid var(--kle-line); box-shadow: var(--shadow-card); border-radius: var(--radius-md); }
 .kle-theme .btn { background: var(--kle-red); border-color: var(--kle-red); color: #fff; }
 .kle-theme .btn:hover:not(:disabled) { background: var(--kle-red-dark); border-color: var(--kle-red-dark); color: #fff; }
-.kle-theme .btn:focus-visible { outline: 3px solid #d98a8d; outline-offset: 2px; }
+.kle-theme .btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus-ring); }
 .kle-theme .btn-secondary { background: #fff; color: var(--kle-red-ink); border-color: var(--kle-line); }
 .kle-theme .btn-secondary:hover:not(:disabled) { background: var(--kle-red-tint); }
 .kle-theme label { color: var(--kle-ink); }
 .kle-theme input, .kle-theme select, .kle-theme textarea { border-color: var(--kle-line); color: var(--kle-ink); background: #fff; }
-.kle-theme input:focus-visible, .kle-theme select:focus-visible, .kle-theme textarea:focus-visible { outline: 3px solid #d98a8d; outline-offset: 1px; border-color: var(--kle-red); }
-.kle-theme .pill-info { background: var(--kle-red-tint); color: var(--kle-red-ink); }
+.kle-theme input:focus-visible, .kle-theme select:focus-visible, .kle-theme textarea:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus-ring); border-color: var(--kle-red); }
+.kle-theme .pill-info { background: var(--kle-red-tint); color: var(--brand-primary-hover); }
 .kle-theme .alert-danger { border-left-color: var(--kle-red); }
-.kle-theme .dropzone { border-color: var(--kle-line); background: var(--kle-bg); }
+.kle-theme .dropzone { border-color: var(--kle-line); background: var(--surface-muted); }
+.kle-theme .dropzone:hover { background: var(--kle-red-tint); border-color: var(--kle-red); }
 .kle-theme .dropzone.drag { border-color: var(--kle-red); background: var(--kle-red-tint); }
 .kle-theme .progress div { background: var(--kle-red); }
 .kle-theme .type-option .box { border-color: var(--kle-line); }
 .kle-theme .type-option input:checked + .box { border-color: var(--kle-red); background: var(--kle-red-tint); }
-.kle-theme .topbar-kle { background: #fff; border-bottom: 3px solid var(--kle-red); color: var(--kle-ink); }
+.kle-theme .type-option input:focus-visible + .box { outline: none; box-shadow: 0 0 0 3px var(--focus-ring); }
+.kle-theme .topbar-kle { background: #fff; border-bottom: 2px solid var(--border); box-shadow: 0 1px 4px rgba(30, 35, 45, 0.05); color: var(--kle-ink); }
 .kle-theme .topbar-kle a, .kle-theme .topbar-kle { color: var(--kle-ink); }
-/* nav links + brand text on the white KLE header (scoped; base navy styles untouched) */
+/* nav links + brand text on the white KLE header (scoped; base rules untouched) */
 .kle-theme .topbar-kle .nav-links a { color: var(--kle-ink); }
-.kle-theme .topbar-kle .nav-links a:hover,
-.kle-theme .topbar-kle .nav-links a.active { color: var(--kle-red); }
+.kle-theme .topbar-kle .nav-links a:hover { background: var(--kle-red-tint); color: var(--brand-primary-hover); }
+.kle-theme .topbar-kle .nav-links a.active { color: var(--brand-primary-hover); background: var(--kle-red-tint); box-shadow: inset 3px 0 0 var(--brand-primary); }
 .kle-theme .topbar-kle .brand, .kle-theme .topbar-kle .brand:hover { color: var(--kle-ink); }
 .kle-theme .topbar-kle .brand-text small { color: var(--kle-muted); }
+.kle-theme .nav-toggle { border-color: var(--border); }
 .kle-theme .nav-toggle span { background: var(--kle-ink); }
-.kle-theme .kle-logo { display: block; height: 44px; width: auto; max-width: 210px; } /* original 400x70 aspect ratio preserved */
-.kle-theme .kle-badge { display: inline-block; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--kle-red-ink); background: var(--kle-red-tint); border: 1px solid var(--kle-red-line); border-radius: 999px; padding: 1px 9px; }
-.kle-theme .field-error { color: var(--kle-red-dark); font-size: 0.85rem; margin: 2px 0 6px; }
+.kle-theme .kle-logo { display: block; height: 44px; width: auto; max-width: 210px; object-fit: contain; } /* original 400x70 aspect ratio preserved */
+.kle-theme .kle-badge { display: inline-block; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--brand-primary-hover); background: var(--kle-red-tint); border: 1px solid var(--kle-red-line); border-radius: 999px; padding: 1px 9px; }
+.kle-theme .field-error { color: var(--error); font-size: 0.85rem; margin: 2px 0 6px; }
 .kle-theme .form-section-title { color: var(--kle-red-ink); }
+.kle-theme .app-table tbody tr:hover td { background: var(--kle-red-tint); }
+.kle-theme .link-btn { color: var(--error); }
 @media (max-width: 640px) { .kle-theme .kle-logo { height: 34px; max-width: 160px; } }
 
 * { box-sizing: border-box; }
@@ -86,7 +123,7 @@ body {
 a { color: var(--navy-700); }
 a:hover { color: var(--navy-900); }
 h1, h2, h3 { color: var(--navy-900); line-height: 1.25; margin: 0; }
-h1 { font-family: var(--serif); font-size: 1.9rem; font-weight: 700; }
+h1 { font-size: 1.9rem; font-weight: 700; }
 h2 { font-size: 1.1rem; font-weight: 650; }
 h3 { font-size: 1rem; font-weight: 650; }
 p { margin: 0 0 0.75rem; }
@@ -109,9 +146,9 @@ code { background: var(--navy-50); padding: 1px 5px; border-radius: 4px; font-si
 .brand:hover { color: #fff; }
 .brand-mark {
   width: 38px; height: 38px; border-radius: 6px; border: 2px solid #b9c8ea;
-  display: grid; place-items: center; font-family: var(--serif); font-weight: 700; letter-spacing: 1px;
+  display: grid; place-items: center; font-weight: 700; letter-spacing: 1px;
 }
-.brand-text { display: flex; flex-direction: column; font-family: var(--serif); font-size: 1.05rem; line-height: 1.2; font-weight: 700; }
+.brand-text { display: flex; flex-direction: column; font-size: 1.05rem; line-height: 1.2; font-weight: 700; }
 .brand-text small { font-family: var(--sans); font-weight: 400; font-size: 0.72rem; color: #b9c8ea; letter-spacing: 0.04em; text-transform: uppercase; }
 .nav-links { display: flex; align-items: center; gap: 6px; }
 .nav-links a:not(.btn) {
@@ -191,7 +228,7 @@ input:focus, select:focus { outline: 3px solid #b8cbf0; border-color: var(--navy
 .callout { background: var(--navy-50); border: 1px solid var(--navy-100); border-radius: var(--radius); padding: 12px 14px; font-size: 0.9rem; margin-top: 16px; color: var(--navy-900); }
 
 /* ---------- landing ---------- */
-.hero { background: linear-gradient(135deg, var(--navy-900), var(--navy-700)); color: #fff; }
+.hero { background: linear-gradient(135deg, #2b0d12, var(--text-primary)); color: #fff; } /* dark charcoal with a subtle deep-red tint — keeps red as an accent, not a full-page background */
 .hero-inner { max-width: 1080px; margin: 0 auto; padding: 64px 20px 72px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 40px; align-items: center; }
 .hero h1 { color: #fff; font-size: 2.5rem; margin-bottom: 14px; }
 .hero p.lead { font-size: 1.1rem; color: #d3ddf3; max-width: 560px; margin-bottom: 26px; }
@@ -200,7 +237,7 @@ input:focus, select:focus { outline: 3px solid #b8cbf0; border-color: var(--navy
 .hero-panel ol { margin: 0; padding-left: 20px; color: #d3ddf3; font-size: 0.95rem; }
 .hero-panel li { margin-bottom: 6px; }
 .section { margin-top: 44px; }
-.section > h2 { font-family: var(--serif); font-size: 1.45rem; margin-bottom: 6px; }
+.section > h2 { font-size: 1.45rem; margin-bottom: 6px; }
 .section > .muted { margin-bottom: 18px; }
 .grid { display: grid; gap: 16px; }
 .grid-4 { grid-template-columns: repeat(4, 1fr); }
@@ -216,7 +253,7 @@ input:focus, select:focus { outline: 3px solid #b8cbf0; border-color: var(--navy
 /* ---------- dashboard ---------- */
 .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 22px; }
 .stat { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); }
-.stat .num { font-family: var(--serif); font-size: 2rem; font-weight: 700; color: var(--navy-900); line-height: 1.1; }
+.stat .num { font-size: 2rem; font-weight: 700; color: var(--navy-900); line-height: 1.1; }
 .stat .lbl { color: var(--muted); font-size: 0.85rem; }
 .app-table { width: 100%; border-collapse: collapse; }
 .app-table th { text-align: left; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 8px 10px; border-bottom: 2px solid var(--line); }
@@ -277,7 +314,7 @@ legend.label { padding: 0; margin: 0 0 8px; }
 .summary-list dt { color: var(--muted); }
 .summary-list dd { margin: 0; text-align: right; font-weight: 600; word-break: break-word; }
 .fee-box { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; background: var(--navy-50); border: 1px solid var(--navy-100); border-radius: var(--radius); padding: 14px 16px; margin: 12px 0 16px; }
-.fee-box .amount { font-family: var(--serif); font-size: 1.7rem; font-weight: 700; color: var(--navy-900); }
+.fee-box .amount { font-size: 1.7rem; font-weight: 700; color: var(--navy-900); }
 .sandbox-tag { display: inline-block; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; background: var(--warning-bg); color: var(--warning); border: 1px solid #efd9a0; border-radius: 4px; padding: 1px 7px; vertical-align: middle; }
 .reason-list { margin: 8px 0 0; padding-left: 20px; }
 .doc-item { border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; margin-bottom: 10px; }
