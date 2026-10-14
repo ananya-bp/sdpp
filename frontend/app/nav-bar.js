@@ -38,7 +38,8 @@ export default function NavBar() {
     <header className="topbar topbar-kle">
       <div className="topbar-inner">
         <Link href="/" className="brand">
-          {/* Original KLE Tech logo PNG (public/logo.png), native 400x70 aspect ratio preserved. */}
+          {/* Original KLE Tech logo PNG (public/logo.png), native 400x70 aspect ratio preserved.
+              The image already contains the university name/branding, so no redundant title text. */}
           <Image
             src="/logo.png"
             alt="KLE Technological University logo"
@@ -47,10 +48,6 @@ export default function NavBar() {
             className="kle-logo"
             priority
           />
-          <span className="brand-text kle-brand-text">
-            KLE Tech — Student Document Portal
-            <small>Academic document services</small>
-          </span>
         </Link>
 
         <button
